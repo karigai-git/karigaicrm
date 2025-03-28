@@ -50,17 +50,14 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Add esbuild for server build
-RUN npm install -D esbuild
-
 # Copy the rest of the application code
 COPY . .
 
-# Build both the frontend and server
-RUN npm run build:all
+# Build the frontend
+RUN npm run build
 
 # Expose the ports the app runs on
 EXPOSE 4000 8080
 
-# Start the server
+# Start the server with tsx (directly running TypeScript)
 CMD ["npm", "run", "start:server"]

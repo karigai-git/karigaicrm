@@ -7,11 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "build:server": "tsx ./src/server/build.ts",
+    "build:server": "tsx --build tsconfig.server.json && cp -r src/server dist-server/ && cp -r src/api dist-server/ && cp -r src/lib dist-server/",
     "lint": "eslint .",
     "preview": "vite preview",
     "start:email-server": "tsx src/server/index.ts",
-    "start:server": "node dist-server/server/index.js",
+    "start:server": "tsx src/server/index.ts",
     "reset:email-templates": "node resetEmailTemplates.mjs",
     "dev:all": "concurrently \"npm run dev\" \"npm run start:email-server\"",
     "build:all": "npm run build && npm run build:server"
