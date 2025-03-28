@@ -1,21 +1,34 @@
 # Konipai CRM Deployment Guide for Hetzner
 
-This guide walks you through deploying the Konipai CRM application on a Hetzner server using Docker and Nginx.
+This guide walks you through deploying the Konipai CRM application on our Hetzner server using Docker and Nginx.
 
-## Prerequisites
+## Server Information
 
-- A Hetzner Cloud server (recommended: CX21 or higher with Ubuntu 22.04)
-- A domain name pointing to your Hetzner server
-- Docker installed on both your local machine and the Hetzner server
+- **Server IP**: 65.109.167.179
+- **Username**: root
+- **Password**: Life@123
 
-## Step 1: Prepare Your Hetzner Server
+## Deployment Process
 
-1. Create a new server on Hetzner Cloud with Ubuntu 22.04
-2. Install Docker:
+The deployment process has been automated using the `deploy-hetzner.sh` script. This script:
+
+1. Builds the Docker image locally
+2. Uploads it to the Hetzner server
+3. Sets up SSL certificates with Let's Encrypt
+4. Deploys and starts the application
+
+## Manual Deployment Steps (if needed)
+
+### Step 1: Connect to the Hetzner Server
 
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh root@65.109.167.179
+# Enter password: Life@123
+```
 
+### Step 2: Install Docker (if not already installed)
+
+```bash
 # Update package information
 apt-get update
 
@@ -38,131 +51,77 @@ apt-get install -y docker-ce
 docker run hello-world
 ```
 
-## Step 2: Configure Your Domain
+### Step 3: Deploy the Application Manually
 
-Make sure your domain (e.g., konipai.example.com) points to your Hetzner server's IP address by setting an A record in your DNS settings.
-
-## Step 3: Configure the Deployment Files
-
-1. Update the `nginx.conf` file:
-   - Replace `konipai.example.com` with your actual domain name
-
-2. Update the `deploy-hetzner.sh` script:
-   - Set `SERVER_IP` to your Hetzner server's IP address
-   - Set `DOMAIN` to your actual domain name
-   - Set `USERNAME` to your SSH username (usually "root" for Hetzner)
-
-3. Make the script executable:
+1. Copy the Docker image to the server:
    ```bash
-   chmod +x deploy-hetzner.sh
+   # On your local machine
+   docker build -t konipai-crm-hetzner -f Dockerfile.hetzner .
+   docker save konipai-crm-hetzner | gzip > konipai-crm-hetzner.tar.gz
+   scp konipai-crm-hetzner.tar.gz root@65.109.167.179:/tmp/
    ```
 
-## Step 4: Deploy the Application
-
-1. Run the deployment script:
+2. On the server, load and run the Docker image:
    ```bash
-   ./deploy-hetzner.sh
+   # Load the Docker image
+   docker load < /tmp/konipai-crm-hetzner.tar.gz
+
+   # Create application directory
+   mkdir -p /opt/konipai-crm/ssl
+
+   # Create self-signed certificates (temporary until Let's Encrypt is set up)
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout /opt/konipai-crm/ssl/privkey.pem \
+     -out /opt/konipai-crm/ssl/fullchain.pem \
+     -subj "/CN=65.109.167.179"
+
+   # Run the Docker container
+   docker run -d --name konipai-crm \
+     -p 80:80 \
+     -p 443:443 \
+     -p 3001:3001 \
+     -v /opt/konipai-crm/ssl:/etc/nginx/ssl \
+     --restart unless-stopped \
+     konipai-crm-hetzner
    ```
 
-   This script will:
-   - Build a Docker image locally
-   - Upload it to your Hetzner server
-   - Set up SSL certificates with Let's Encrypt
-   - Deploy and start the application
+## Accessing the Application
 
-2. The deployment process will take a few minutes. Once completed, your application will be accessible at `https://your-domain.com`.
-
-## Step 5: Verify the Deployment
-
-1. Visit your domain in a browser to verify that the application is accessible
-2. Check that HTTPS is working correctly
-3. Verify that the email API is functioning by testing email features
+Once deployed, the application will be accessible at:
+- https://65.109.167.179
 
 ## Troubleshooting
 
-### SSL Certificate Issues
-
-If you encounter SSL certificate issues:
+### Viewing Container Logs
 
 ```bash
-ssh root@YOUR_SERVER_IP
-
-# Check Certbot logs
-cat /var/log/letsencrypt/letsencrypt.log
-
-# Verify certificates exist
-ls -la /etc/letsencrypt/live/your-domain.com/
-```
-
-### Container Not Starting
-
-Check Docker logs:
-
-```bash
-ssh root@YOUR_SERVER_IP
-
-# Check container status
-docker ps -a
-
-# View container logs
+ssh root@65.109.167.179
 docker logs konipai-crm
 ```
 
-### Nginx Configuration Issues
-
-Check Nginx logs:
+### Restarting the Container
 
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh root@65.109.167.179
+docker restart konipai-crm
+```
 
-# Enter the container
+### Check Container Status
+
+```bash
+ssh root@65.109.167.179
+docker ps -a
+```
+
+### Entering the Container
+
+```bash
+ssh root@65.109.167.179
 docker exec -it konipai-crm sh
-
-# Check Nginx configuration
-nginx -t
-
-# View Nginx logs
-cat /var/log/nginx/error.log
 ```
-
-## Maintenance
-
-### Updating the Application
-
-To update the application, simply run the deployment script again:
-
-```bash
-./deploy-hetzner.sh
-```
-
-### Backup
-
-Regularly back up your data:
-
-```bash
-ssh root@YOUR_SERVER_IP
-
-# Backup SSL certificates
-mkdir -p /backup/ssl
-cp -r /etc/letsencrypt/live/your-domain.com/ /backup/ssl/
-```
-
-### Monitoring
-
-Consider setting up monitoring for your server using tools like:
-- Netdata
-- Prometheus + Grafana
-- UptimeRobot for external monitoring
-
-## Security Considerations
-
-1. Consider setting up a non-root user with sudo privileges
-2. Configure a firewall (UFW) to restrict access
-3. Set up automatic security updates
-4. Implement fail2ban to prevent brute force attacks
 
 ## Support
 
-If you encounter any issues with the deployment, please check the container logs and Nginx error logs for more information.
+If you encounter any issues with the deployment, check the container logs for more information.
 
-For further assistance, contact the support team at support@konipai.in. 
+For further assistance, contact the support team. 
