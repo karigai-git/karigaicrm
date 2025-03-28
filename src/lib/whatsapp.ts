@@ -6,16 +6,23 @@ import { Order, OrderItem, Product, User } from '@/types/schema';
  * @returns The URL to use for WhatsApp API calls
  */
 export function getWhatsAppApiUrl(): string {
-  // First try to get the API URL from the environment variables
+  // Get the API URL from the environment variables
   const envUrl = import.meta.env.VITE_WHATSAPP_API_URL;
   
-  // Then try to get it from the .env file via the server environment
-  const envApiUrl = envUrl || '/whatsapp-api';
+  if (!envUrl) {
+    console.warn('VITE_WHATSAPP_API_URL not found in environment. Falling back to proxy path.');
+    return '/whatsapp-api';
+  }
   
-  // Log the API URL being used (useful for debugging)
-  console.log('Using WhatsApp API URL:', envApiUrl);
+  // If in development mode and using localhost, use the proxy
+  if (window.location.hostname === 'localhost' && !envUrl.startsWith('/whatsapp-api')) {
+    console.log('Development environment detected. Using proxy path for WhatsApp API');
+    return '/whatsapp-api';
+  }
   
-  return envApiUrl;
+  // For production or if explicitly set to use proxy
+  console.log('Using WhatsApp API URL:', envUrl);
+  return envUrl;
 }
 
 // Use the function to set the API URL
@@ -1198,12 +1205,19 @@ export async function checkWhatsAppConnection(): Promise<{
   message?: string;
 }> {
   try {
-    // Make a request to the status endpoint
-    // Use the proxy path defined in vite.config.ts to avoid CORS issues
+    // Get the API URL dynamically (to ensure we have the latest)
     const apiUrl = getWhatsAppApiUrl();
     console.log('Checking WhatsApp connection at:', apiUrl);
     
-    const response = await axios.get(`${apiUrl}/status`);
+    // Set up axios request with proper CORS handling
+    const response = await axios.get(`${apiUrl}/status`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    console.log('WhatsApp connection check successful:', response.data);
     
     // Return the connection status
     return {
@@ -1214,11 +1228,16 @@ export async function checkWhatsAppConnection(): Promise<{
   } catch (error) {
     console.error('Error checking WhatsApp connection:', error);
     
+    // Check for CORS-related errors
+    if (axios.isAxiosError(error) && error.message.includes('Network Error')) {
+      console.warn('Possible CORS issue. Make sure the WhatsApp API server has appropriate CORS headers enabled.');
+    }
+    
     // Return disconnected status
     return {
       connected: false,
       status: 'disconnected',
-      message: 'WhatsApp API is not connected'
+      message: 'WhatsApp API is not connected. Please check console for details.'
     };
   }
 }

@@ -58,8 +58,10 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Make WhatsApp API URL available to the app
-      // Use '/whatsapp-api' for client-side to ensure all requests go through proxy
-      'import.meta.env.VITE_WHATSAPP_API_URL': JSON.stringify('/whatsapp-api'),
+      // In development, use proxy; in production use the actual URL from env
+      'import.meta.env.VITE_WHATSAPP_API_URL': mode === 'development' 
+        ? JSON.stringify('/whatsapp-api')
+        : JSON.stringify(whatsAppApiUrl),
     }
   };
 });
