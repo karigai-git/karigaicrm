@@ -1,24 +1,66 @@
-# Use Node.js LTS as the base image
+# Use Node.js as the base image
 FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json
+# Define build arguments for environment variables
+ARG VITE_POCKETBASE_URL
+ARG POCKETBASE_ADMIN_EMAIL
+ARG POCKETBASE_ADMIN_PASSWORD
+ARG VITE_RAZORPAY_KEY_ID
+ARG RAZORPAY_KEY_SECRET
+ARG VITE_SITE_TITLE
+ARG VITE_SITE_LOGO
+ARG EMAIL_HOST
+ARG EMAIL_PORT
+ARG EMAIL_USER
+ARG EMAIL_PASSWORD
+ARG EMAIL_FROM
+ARG SMTP_HOST
+ARG SMTP_PORT
+ARG SMTP_SECURE
+ARG SMTP_USER
+ARG SMTP_PASSWORD
+ARG VITE_GEMINI_API_KEY
+
+# Set environment variables
+ENV VITE_POCKETBASE_URL=$VITE_POCKETBASE_URL
+ENV POCKETBASE_ADMIN_EMAIL=$POCKETBASE_ADMIN_EMAIL
+ENV POCKETBASE_ADMIN_PASSWORD=$POCKETBASE_ADMIN_PASSWORD
+ENV VITE_RAZORPAY_KEY_ID=$VITE_RAZORPAY_KEY_ID
+ENV RAZORPAY_KEY_SECRET=$RAZORPAY_KEY_SECRET
+ENV VITE_SITE_TITLE=$VITE_SITE_TITLE
+ENV VITE_SITE_LOGO=$VITE_SITE_LOGO
+ENV EMAIL_HOST=$EMAIL_HOST
+ENV EMAIL_PORT=$EMAIL_PORT
+ENV EMAIL_USER=$EMAIL_USER
+ENV EMAIL_PASSWORD=$EMAIL_PASSWORD
+ENV EMAIL_FROM=$EMAIL_FROM
+ENV SMTP_HOST=$SMTP_HOST
+ENV SMTP_PORT=$SMTP_PORT
+ENV SMTP_SECURE=$SMTP_SECURE
+ENV SMTP_USER=$SMTP_USER
+ENV SMTP_PASSWORD=$SMTP_PASSWORD
+ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+
+# Copy package files
 COPY package*.json ./
 
-# Install dependencies using install instead of ci
+# Install dependencies
 RUN npm install
 
-# Copy the rest of the application code
+# Add esbuild for server build
+RUN npm install -D esbuild
+
+# Copy all files to the container
 COPY . .
 
-# Build the frontend
-RUN npm run build
+# Build the React app
+RUN npm run build:all
 
 # Expose the ports the app runs on
 EXPOSE 4000 8080
 
-# Start both the server and frontend
-# Using tsx to run TypeScript files directly instead of compiling first
-CMD ["sh", "-c", "npx tsx src/server/index.ts & npx serve -s dist -l 8080"]
+# Start the server when the container starts
+CMD ["npm", "run", "start:server"]
