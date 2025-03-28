@@ -64,14 +64,8 @@ RUN npm run build
 # Build the server files
 RUN npm run build:server
 
-# Copy the entrypoint script into the container
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-
-# Make the entrypoint script executable
-RUN chmod +x /app/docker-entrypoint.sh
-
 # Expose the ports the app runs on
 EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Start the server when the container starts
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+# Use simple direct command to start both servers
+CMD /bin/sh -c "npx serve -s dist -p 8080 & tsx src/server/index.ts"
