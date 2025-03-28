@@ -11,7 +11,13 @@ export default defineConfig(({ mode }) => {
   // Get WhatsApp API URL from .env or use default
   const whatsAppApiUrl = env.WHATSAPP_API_URL || 'https://backend-whatsappapi.7za6uc.easypanel.host';
   
+  // Email service configuration - default to local server in development
+  const emailApiUrl = mode === 'production'
+    ? (env.EMAIL_API_URL || 'http://localhost:3001')
+    : 'http://localhost:3001';
+  
   console.log(`Configuring WhatsApp API proxy with target: ${whatsAppApiUrl}`);
+  console.log(`Configuring Email API proxy with target: ${emailApiUrl}`);
   
   return {
     server: {
@@ -26,24 +32,32 @@ export default defineConfig(({ mode }) => {
           // Add CORS headers
           configure: (proxy, _options) => {
             proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err);
+              console.log('WhatsApp proxy error:', err);
             });
             proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Sending Request to the Target:', req.method, req.url);
+              console.log('Sending WhatsApp Request:', req.method, req.url);
             });
             proxy.on('proxyRes', (proxyRes, req, _res) => {
-              console.log('Received Response from the Target:', proxyRes.statusCode, req.url);
+              console.log('Received WhatsApp Response:', proxyRes.statusCode, req.url);
             });
           }
         },
         '/email-api': {
-          // In production, the email server will run alongside the frontend
-          target: mode === 'production' 
-            ? 'http://localhost:3001' 
-            : 'http://localhost:3001',  
+          target: emailApiUrl,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/email-api/, '/api/email'),
           secure: false,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, _res) => {
+              console.log('Email proxy error:', err);
+            });
+            proxy.on('proxyReq', (proxyReq, req, _res) => {
+              console.log('Sending Email Request:', req.method, req.url);
+            });
+            proxy.on('proxyRes', (proxyRes, req, _res) => {
+              console.log('Received Email Response:', proxyRes.statusCode, req.url);
+            });
+          }
         },
       },
     },
@@ -62,6 +76,8 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_WHATSAPP_API_URL': mode === 'development' 
         ? JSON.stringify('/whatsapp-api')
         : JSON.stringify(whatsAppApiUrl),
+      // Define email API URL for client-side use
+      'import.meta.env.VITE_EMAIL_API_URL': JSON.stringify('/email-api'),
     }
   };
 });

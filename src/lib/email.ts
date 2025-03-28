@@ -568,18 +568,61 @@ export async function checkEmailConnection(): Promise<{
   message?: string;
 }> {
   try {
-    const response = await api.get(`${EMAIL_API_URL}/connection-status`);
+    console.log('Checking email connection at:', `${EMAIL_API_URL}/connection-status`);
+    
+    // Use direct axios call with proper headers and error handling
+    const response = await axios.get(`${EMAIL_API_URL}/connection-status`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      // Increase timeout for slow server response
+      timeout: 5000
+    });
+    
+    console.log('Email connection check response:', response.data);
+    
     return {
-      connected: response.connected || false,
-      status: response.status || 'unknown',
-      message: response.message || 'Connection status checked'
+      connected: response.data.connected || false,
+      status: response.data.status || 'unknown',
+      message: response.data.message || 'Connection status checked'
     };
   } catch (error) {
     console.error('Error checking email connection:', error);
+    
+    // Provide more detailed error information for debugging
+    let errorMessage = 'Failed to check email connection';
+    let errorStatus = 'error';
+    
+    if (axios.isAxiosError(error)) {
+      // Extract more specific error information from Axios error
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error('Email server error response:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        errorMessage = `Email server error: ${error.response.status} - ${error.response.data?.message || 'Unknown error'}`;
+        errorStatus = 'server_error';
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('No response received from email server');
+        errorMessage = 'Email server is not responding. The server may not be running.';
+        errorStatus = 'no_response';
+      } else {
+        // Something happened in setting up the request
+        errorMessage = `Error setting up request: ${error.message}`;
+        errorStatus = 'request_error';
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     return {
       connected: false,
-      status: 'error',
-      message: error instanceof Error ? error.message : 'Failed to check email connection'
+      status: errorStatus,
+      message: errorMessage
     };
   }
 }
