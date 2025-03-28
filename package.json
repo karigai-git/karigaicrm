@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "build:server": "tsx --build tsconfig.server.json && cp -r src/server dist-server/ && cp -r src/api dist-server/ && cp -r src/lib dist-server/",
+    "build:server": "mkdir -p dist-server && cp -r src/server dist-server/ && cp -r src/api dist-server/ && cp -r src/lib dist-server/",
     "lint": "eslint .",
     "preview": "vite preview",
     "start:email-server": "tsx src/server/index.ts",
