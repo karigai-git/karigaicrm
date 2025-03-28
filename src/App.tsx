@@ -9,7 +9,23 @@ import OrdersPage from "./pages/admin/OrdersPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+// Set PocketBase URL from environment variable
+if (import.meta.env.VITE_POCKETBASE_URL) {
+  console.log("PocketBase URL:", import.meta.env.VITE_POCKETBASE_URL);
+} else {
+  console.warn("PocketBase URL not found in environment variables, using default");
+}
+
+// Configure React Query
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { LockKeyhole, Mail } from 'lucide-react';
+import { authenticateAdmin, pb } from '@/lib/pocketbase';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -19,12 +19,23 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate authentication (replace with actual PocketBase auth)
-    setTimeout(() => {
+    try {
+      // Try to authenticate with PocketBase admin API
+      await authenticateAdmin(email, password);
+      
+      toast({
+        title: 'Login Successful',
+        description: 'Welcome to Konipai CRM',
+      });
+      navigate('/admin');
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Fallback to demo credentials for testing
       if (email === 'admin@konipai.com' && password === 'admin') {
         toast({
-          title: 'Login Successful',
-          description: 'Welcome to Konipai CRM',
+          title: 'Demo Login Successful',
+          description: 'Using demo credentials',
         });
         navigate('/admin');
       } else {
@@ -34,8 +45,9 @@ const LoginPage: React.FC = () => {
           variant: 'destructive',
         });
       }
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
