@@ -43,14 +43,12 @@ ENV SMTP_SECURE=$SMTP_SECURE
 ENV SMTP_USER=$SMTP_USER
 ENV SMTP_PASSWORD=$SMTP_PASSWORD
 ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
-ENV SERVER_PORT=8080
 
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
-RUN npm install serve
 
 # Copy the rest of the application code
 COPY . .
@@ -58,50 +56,8 @@ COPY . .
 # Build the frontend
 RUN npm run build
 
-# Create a server.js file to serve both API and frontend
-RUN echo 'import express from "express";\
-import cors from "cors";\
-import bodyParser from "body-parser";\
-import path from "path";\
-import { fileURLToPath } from "url";\
-import { dirname } from "path";\
-import emailRoutes from "./src/api/email.js";\
-\
-const __filename = fileURLToPath(import.meta.url);\
-const __dirname = dirname(__filename);\
-\
-const app = express();\
-const PORT = process.env.SERVER_PORT || 8080;\
-\
-// Middleware\
-app.use(cors());\
-app.use(bodyParser.json({ limit: "10mb" }));\
-app.use(bodyParser.urlencoded({ extended: true }));\
-\
-// API Routes\
-app.use("/api/email", emailRoutes);\
-\
-// Health check endpoint\
-app.get("/health", (req, res) => {\
-  res.status(200).json({ status: "ok" });\
-});\
-\
-// Serve static files from the dist directory\
-app.use(express.static(path.join(__dirname, "dist")));\
-\
-// For any other route, serve the index.html file\
-app.get("*", (req, res) => {\
-  res.sendFile(path.join(__dirname, "dist", "index.html"));\
-});\
-\
-// Start the server\
-app.listen(PORT, () => {\
-  console.log(`Server running on port ${PORT}`);\
-});\
-' > server.js
+# Expose the ports the app runs on
+EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Expose port 8080
-EXPOSE 8080
-
-# Start the server
-CMD ["node", "server.js"]
+# Start the server with tsx (directly running TypeScript)
+CMD ["npm", "run", "start:server"]
