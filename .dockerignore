@@ -1,0 +1,33 @@
+# Node modules and dependencies
+node_modules
+npm-debug.log
+
+# Build artifacts
+dist
+
+# Git related files
+.git
+.gitignore
+
+# Development files
+.vscode
+.idea
+*.md
+!README.md
+
+# Environment files (we'll copy .env manually in the Dockerfile)
+.env.local
+.env.development
+.env.test
+
+# Logs
+logs
+*.log
+
+# Temporary files
+tmp
+temp
+
+# Other unnecessary files
+*.DS_Store
+Thumbsdb
