@@ -64,8 +64,13 @@ RUN npm run build
 # Build the server files
 RUN npm run build:server
 
+# Create start.sh script for Easypanel compatibility
+RUN echo '#!/bin/sh' > start.sh && \
+    echo 'npx serve -s dist -p 8080 & tsx src/server/index.ts' >> start.sh && \
+    chmod +x start.sh
+
 # Expose the ports the app runs on
 EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Use simple direct command to start both servers
-CMD /bin/sh -c "npx serve -s dist -p 8080 & tsx src/server/index.ts"
+# Command is empty to let Easypanel's entrypoint handle execution
+CMD ["./start.sh"]
