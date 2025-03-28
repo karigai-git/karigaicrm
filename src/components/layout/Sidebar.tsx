@@ -35,8 +35,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
       className={cn(
         "flex items-center py-3 px-4 text-sm rounded-md transition-colors",
         active 
-          ? "bg-konipai-500 text-white" 
-          : "text-gray-600 hover:bg-konipai-100 hover:text-konipai-700",
+          ? "bg-primary text-primary-foreground" 
+          : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
         collapsed && "justify-center"
       )}
     >
@@ -62,7 +62,7 @@ export const Sidebar: React.FC = () => {
   return (
     <div 
       className={cn(
-        "bg-white h-full border-r flex flex-col transition-all duration-300",
+        "bg-card h-full border-r flex flex-col transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
     >
@@ -71,12 +71,12 @@ export const Sidebar: React.FC = () => {
         "h-16 flex items-center border-b px-4",
         collapsed ? "justify-center" : "justify-between"
       )}>
-        {!collapsed && <span className="text-xl font-bold text-konipai-800">Konipai</span>}
+        {!collapsed && <span className="text-xl font-bold text-foreground">Konipai</span>}
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={() => setCollapsed(!collapsed)}
-          className="text-gray-500"
+          className="text-muted-foreground"
         >
           {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
         </Button>

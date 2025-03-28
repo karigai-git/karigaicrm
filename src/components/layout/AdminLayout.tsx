@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -18,17 +19,20 @@ interface AdminLayoutProps {
 
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-100">
+    <div className="flex h-screen overflow-hidden bg-background">
       {/* Sidebar */}
       <Sidebar />
       
       {/* Main content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Top navigation */}
-        <header className="flex items-center justify-between p-4 bg-white border-b shadow-sm">
-          <h1 className="text-2xl font-bold text-konipai-800">Konipai CRM</h1>
+        <header className="flex items-center justify-between p-4 bg-card border-b shadow-sm">
+          <h1 className="text-2xl font-bold text-foreground">Konipai CRM</h1>
           
           <div className="flex items-center space-x-4">
+            {/* Theme Toggle */}
+            <ThemeToggle />
+            
             {/* Notifications */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -44,13 +48,13 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                   <DropdownMenuItem>
                     <div className="flex flex-col">
                       <span className="font-medium">New order received</span>
-                      <span className="text-xs text-gray-500">5 minutes ago</span>
+                      <span className="text-xs text-muted-foreground">5 minutes ago</span>
                     </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <div className="flex flex-col">
                       <span className="font-medium">Payment confirmed</span>
-                      <span className="text-xs text-gray-500">1 hour ago</span>
+                      <span className="text-xs text-muted-foreground">1 hour ago</span>
                     </div>
                   </DropdownMenuItem>
                 </div>
