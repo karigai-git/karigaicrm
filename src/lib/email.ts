@@ -1,5 +1,6 @@
 import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
+import { api } from './api';
 
 // Email API URL using the proxy configured in vite.config.js
 const EMAIL_API_URL = '/email-api';
@@ -45,6 +46,15 @@ export enum EmailTemplate {
 }
 
 /**
+ * Validate an email address format
+ * @param email - Email address to validate
+ */
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
  * Send an email message
  * @param to - Recipient email address
  * @param subject - Email subject
@@ -80,18 +90,18 @@ export async function sendEmailMessage(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Use our new API utility instead of direct axios calls
     console.log('Sending email to:', to);
-    const response = await axios.post(`${EMAIL_API_URL}/send-email`, data);
-    console.log('Email API response:', response.data);
+    const response = await api.post(`${EMAIL_API_URL}/send-email`, data);
+    console.log('Email API response:', response);
     
     // Return a standardized response
     return {
       success: true,
       message: 'Email sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
+      messageId: response.messageId || response.id,
+      status: response.status || 'sent',
+      timestamp: response.timestamp || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error sending email:', error);
@@ -153,18 +163,18 @@ export async function sendEmailWithAttachment(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Use our new API utility instead of direct axios calls
     console.log('Sending email with attachment to:', to);
-    const response = await axios.post(`${EMAIL_API_URL}/send-email-with-attachment`, data);
-    console.log('Email API response:', response.data);
+    const response = await api.post(`${EMAIL_API_URL}/send-email-with-attachment`, data);
+    console.log('Email API response:', response);
     
     // Return a standardized response
     return {
       success: true,
       message: 'Email with attachment sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
+      messageId: response.messageId || response.id,
+      status: response.status || 'sent',
+      timestamp: response.timestamp || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error sending email with attachment:', error);
@@ -541,20 +551,11 @@ export async function sendReorderReminderEmail(
  */
 export async function logEmailActivity(activity: EmailActivity): Promise<void> {
   try {
-    await axios.post(`${EMAIL_API_URL}/log-activity`, activity);
+    await api.post(`${EMAIL_API_URL}/log-activity`, activity);
     console.log('Email activity logged:', activity);
   } catch (error) {
     console.error('Error logging email activity:', error);
   }
-}
-
-/**
- * Check if an email address is valid
- * @param email - Email address to validate
- */
-export function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
 }
 
 /**
@@ -567,11 +568,11 @@ export async function checkEmailConnection(): Promise<{
   message?: string;
 }> {
   try {
-    const response = await axios.get(`${EMAIL_API_URL}/status`);
+    const response = await api.get(`${EMAIL_API_URL}/status`);
     return {
-      connected: response.data.connected || false,
-      status: response.data.status || 'unknown',
-      message: response.data.message || 'Connection status checked'
+      connected: response.connected || false,
+      status: response.status || 'unknown',
+      message: response.message || 'Connection status checked'
     };
   } catch (error) {
     console.error('Error checking email connection:', error);

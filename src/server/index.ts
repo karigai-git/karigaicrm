@@ -4,8 +4,9 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import emailRoutes from '../api/email';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 import { createServer } from 'http';
+import { writeFileSync } from 'fs';
 
 // Handle ESM in TypeScript
 const __filename = fileURLToPath(import.meta.url);
@@ -31,8 +32,31 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+// Server port info endpoint
+app.get('/port-info', (req, res) => {
+  const address = server.address();
+  let port = 0;
+  
+  if (typeof address === 'object' && address !== null) {
+    port = address.port;
+  }
+  
+  res.status(200).json({ port });
+});
+
 // Create HTTP server
 const server = createServer(app);
+
+// Function to save port information to a file
+const savePortInfo = (port: number) => {
+  try {
+    const portInfoPath = join(process.cwd(), 'port-info.json');
+    writeFileSync(portInfoPath, JSON.stringify({ port }));
+    console.log(`Port information saved to ${portInfoPath}`);
+  } catch (err) {
+    console.error('Failed to save port information:', err);
+  }
+};
 
 // Function to attempt starting the server on a given port
 const startServer = (port: number): Promise<number> => {
@@ -48,6 +72,8 @@ const startServer = (port: number): Promise<number> => {
     
     server.once('listening', () => {
       console.log(`Email server running on port ${port}`);
+      // Save port information for the frontend to use
+      savePortInfo(port);
       resolve(port);
     });
     
