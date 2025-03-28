@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -20,6 +21,7 @@ interface SidebarItemProps {
   path: string;
   active: boolean;
   collapsed: boolean;
+  onNavigate?: () => void;
 }
 
 const SidebarItem: React.FC<SidebarItemProps> = ({ 
@@ -27,7 +29,8 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
   title, 
   path, 
   active, 
-  collapsed 
+  collapsed,
+  onNavigate
 }) => {
   return (
     <Link 
@@ -39,6 +42,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
           : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground",
         collapsed && "justify-center"
       )}
+      onClick={onNavigate}
     >
       <Icon size={20} className={cn(collapsed ? "mx-0" : "mr-3")} />
       {!collapsed && <span>{title}</span>}
@@ -46,8 +50,13 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
   );
 };
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  onNavigate?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
 
   const items = [
@@ -63,7 +72,8 @@ export const Sidebar: React.FC = () => {
     <div 
       className={cn(
         "bg-card h-full border-r flex flex-col transition-all duration-300",
-        collapsed ? "w-16" : "w-64"
+        collapsed ? "w-16" : "w-64",
+        isMobile ? "w-full" : ""
       )}
     >
       {/* Logo */}
@@ -72,18 +82,20 @@ export const Sidebar: React.FC = () => {
         collapsed ? "justify-center" : "justify-between"
       )}>
         {!collapsed && <span className="text-xl font-bold text-foreground">Konipai</span>}
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => setCollapsed(!collapsed)}
-          className="text-muted-foreground"
-        >
-          {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-        </Button>
+        {!isMobile && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setCollapsed(!collapsed)}
+            className="text-muted-foreground"
+          >
+            {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+          </Button>
+        )}
       </div>
       
       {/* Navigation items */}
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
         {items.map((item) => (
           <SidebarItem
             key={item.path}
@@ -92,6 +104,7 @@ export const Sidebar: React.FC = () => {
             path={item.path}
             active={location.pathname === item.path}
             collapsed={collapsed}
+            onNavigate={onNavigate}
           />
         ))}
       </nav>
