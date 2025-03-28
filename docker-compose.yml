@@ -34,5 +34,4 @@ services:
       - ./logs:/app/logs
     command: >
       sh -c "npm run start:server & 
-             cd dist && 
-             npx serve -s -l 8080"
+             npx serve -s dist -l 8080"
