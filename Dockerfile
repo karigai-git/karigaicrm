@@ -52,6 +52,9 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
+# Install serve globally for serving the frontend
+RUN npm install -g serve
+
 # Copy the rest of the application code
 COPY . .
 
@@ -61,5 +64,11 @@ RUN npm run build
 # Expose the ports the app runs on
 EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Start the server with tsx (directly running TypeScript)
-CMD ["npm", "run", "start:server"]
+# Create a startup script
+RUN echo '#!/bin/sh\n\
+npm run start:server & \n\
+serve -s dist -l 8080\n\
+' > /app/start.sh && chmod +x /app/start.sh
+
+# Start both the server and frontend when the container starts
+CMD ["/app/start.sh"]
