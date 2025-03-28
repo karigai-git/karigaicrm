@@ -3,42 +3,89 @@ import PocketBase from 'pocketbase';
 // Initialize PocketBase with the URL from environment variables
 export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL);
 
+// Disable auto-cancellation of requests which is causing issues
+pb.autoCancellation(false);
+
 // Add a timeout to PocketBase requests
-const AUTH_TIMEOUT = 10000; // 10 seconds
+const AUTH_TIMEOUT = 15000; // 15 seconds
 const MAX_RETRIES = 3;
+
+// Prevent multiple concurrent auth attempts with a simple lock
+let authInProgress = false;
+let authPromiseResolve: Function | null = null;
+let authPromiseReject: Function | null = null;
+let authPromise: Promise<any> | null = null;
 
 // Auto authenticate with admin credentials
 export const initAdmin = async (retryCount = 0) => {
+  // If authentication is already in progress, return the existing promise
+  if (authInProgress && authPromise) {
+    return authPromise;
+  }
+
+  // Create a new authentication promise
+  authInProgress = true;
+  authPromise = new Promise((resolve, reject) => {
+    authPromiseResolve = resolve;
+    authPromiseReject = reject;
+  });
+
   try {
     if (retryCount > MAX_RETRIES) {
       console.error('Max authentication retries reached');
-      throw new Error('Failed to authenticate after multiple attempts');
+      const error = new Error('Failed to authenticate after multiple attempts');
+      if (authPromiseReject) authPromiseReject(error);
+      authInProgress = false;
+      throw error;
     }
     
-    // Set a timeout for the authentication request
-    const authPromise = pb.admins.authWithPassword(
-      import.meta.env.POCKETBASE_ADMIN_EMAIL || 'nnirmal7107@gmail.com',
-      import.meta.env.POCKETBASE_ADMIN_PASSWORD || 'Kamala@7107'
-    );
+    // For demo/development fallback credentials 
+    const email = import.meta.env.POCKETBASE_ADMIN_EMAIL || 'nnirmal7107@gmail.com';
+    const password = import.meta.env.POCKETBASE_ADMIN_PASSWORD || 'Kamala@7107';
     
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Authentication timed out')), AUTH_TIMEOUT);
-    });
+    // Wrap the auth request in a timeout
+    let timeoutId: any = null;
     
-    const authData = await Promise.race([authPromise, timeoutPromise]);
-    console.log('Admin authenticated successfully');
-    return authData;
+    try {
+      // Set a timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('Authentication timed out'));
+        }, AUTH_TIMEOUT);
+      });
+      
+      // Make the auth request
+      const authData = await Promise.race([
+        pb.admins.authWithPassword(email, password),
+        timeoutPromise
+      ]);
+      
+      // Clear the timeout
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      console.log('Admin authenticated successfully');
+      if (authPromiseResolve) authPromiseResolve(authData);
+      authInProgress = false;
+      return authData;
+    } catch (innerError) {
+      // Clear the timeout if it exists
+      if (timeoutId) clearTimeout(timeoutId);
+      throw innerError;
+    }
   } catch (error) {
     console.error(`Admin authentication failed (attempt ${retryCount + 1}):`, error);
     
     // Check if it's a network error (status 0) and retry
-    if (error?.status === 0 && retryCount < MAX_RETRIES) {
+    if ((error?.status === 0 || error?.message === 'Authentication timed out') && retryCount < MAX_RETRIES) {
       console.log(`Retrying authentication in ${(retryCount + 1) * 1000}ms...`);
       await new Promise(resolve => setTimeout(resolve, (retryCount + 1) * 1000));
+      authInProgress = false;
       return initAdmin(retryCount + 1);
     }
     
-    // If it's not a network error or we've exceeded retries, throw the error
+    // If it's not a network error or we've exceeded retries, reject the promise and throw the error
+    if (authPromiseReject) authPromiseReject(error);
+    authInProgress = false;
     throw error;
   }
 };

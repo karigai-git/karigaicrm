@@ -568,7 +568,7 @@ export async function checkEmailConnection(): Promise<{
   message?: string;
 }> {
   try {
-    const response = await api.get(`${EMAIL_API_URL}/status`);
+    const response = await api.get(`${EMAIL_API_URL}/connection-status`);
     return {
       connected: response.connected || false,
       status: response.status || 'unknown',

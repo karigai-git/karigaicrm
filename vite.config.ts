@@ -2,27 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import fs from 'fs';
-
-// Try to read the port-info.json file to get the actual server port
-function getEmailServerPort() {
-  try {
-    if (fs.existsSync('port-info.json')) {
-      const portInfo = JSON.parse(fs.readFileSync('port-info.json', 'utf8'));
-      return portInfo.port;
-    }
-  } catch (err) {
-    console.warn('Could not read port-info.json, falling back to default port', err);
-  }
-  return 3001; // Default fallback port
-}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Determine the email server port
-  const emailServerPort = getEmailServerPort();
-  console.log(`Configuring email API proxy with port: ${emailServerPort}`);
-  
   return {
     server: {
       host: "::",
@@ -35,15 +17,13 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
         '/email-api': {
-          target: `http://localhost:${emailServerPort}`,
+          // In production, the email server will run alongside the frontend
+          target: mode === 'production' 
+            ? 'http://localhost:3001' 
+            : 'http://localhost:3001',  
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/email-api/, '/api/email'),
           secure: false,
-        },
-        // Add direct access to port-info.json
-        '/port-info.json': {
-          target: `http://localhost:${emailServerPort}`,
-          changeOrigin: true,
         },
       },
     },
