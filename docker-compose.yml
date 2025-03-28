@@ -4,7 +4,7 @@ services:
   konipai-crm:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.easypanel
     restart: always
     ports:
       - "4000:4000"
@@ -32,6 +32,3 @@ services:
       - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
     volumes:
       - ./logs:/app/logs
-    command: >
-      sh -c "npm run start:server & 
-             npx serve -s dist -l 8080"
