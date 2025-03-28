@@ -1,0 +1,22 @@
+[phases.setup]
+aptPkgs = ["nodejs", "npm"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "sh -c 'npm run start:server & npx serve -s dist -l 8080'"
+
+[variables]
+NODE_ENV = "production"
+SERVER_PORT = "4000"
+
+[nixpacks]
+start-phase = "start"
+
+[ports]
+http = 8080
+api = 4000
