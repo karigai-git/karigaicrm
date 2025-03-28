@@ -7,6 +7,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import DashboardPage from "./pages/admin/DashboardPage";
 import OrdersPage from "./pages/admin/OrdersPage";
+import CustomersPage from "./pages/admin/CustomersPage";
+import ProductsPage from "./pages/admin/ProductsPage";
+import PaymentsPage from "./pages/admin/PaymentsPage";
+import SettingsPage from "./pages/admin/SettingsPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
@@ -43,6 +47,10 @@ const App = () => (
             {/* Admin routes */}
             <Route path="/admin" element={<DashboardPage />} />
             <Route path="/admin/orders" element={<OrdersPage />} />
+            <Route path="/admin/customers" element={<CustomersPage />} />
+            <Route path="/admin/products" element={<ProductsPage />} />
+            <Route path="/admin/payments" element={<PaymentsPage />} />
+            <Route path="/admin/settings" element={<SettingsPage />} />
             
             {/* Catch-all route */}
             <Route path="*" element={<NotFound />} />
