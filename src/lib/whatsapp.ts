@@ -1199,7 +1199,11 @@ export async function checkWhatsAppConnection(): Promise<{
 }> {
   try {
     // Make a request to the status endpoint
-    const response = await axios.get(`${WHATSAPP_API_URL}/status`);
+    // Use the proxy path defined in vite.config.ts to avoid CORS issues
+    const apiUrl = getWhatsAppApiUrl();
+    console.log('Checking WhatsApp connection at:', apiUrl);
+    
+    const response = await axios.get(`${apiUrl}/status`);
     
     // Return the connection status
     return {
