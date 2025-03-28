@@ -16,9 +16,9 @@ export default defineConfig(({ mode }) => ({
         secure: false,
       },
       '/email-api': {
-        target: 'http://localhost:3001',
+        target: mode === 'production' ? 'http://localhost:4000' : 'http://localhost:4000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/email-api/, ''),
+        rewrite: (path) => path.replace(/^\/email-api/, '/api/email'),
       },
     },
   },
