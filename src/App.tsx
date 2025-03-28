@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +10,10 @@ import CustomersPage from "./pages/admin/CustomersPage";
 import ProductsPage from "./pages/admin/ProductsPage";
 import PaymentsPage from "./pages/admin/PaymentsPage";
 import SettingsPage from "./pages/admin/SettingsPage";
+import WhatsAppActivitiesPage from "./pages/admin/WhatsAppActivitiesPage";
+import WhatsAppTemplatesPage from "./pages/admin/WhatsAppTemplatesPage";
+import EmailActivitiesPage from "./pages/admin/EmailActivitiesPage";
+import EmailTemplatesPage from "./pages/admin/EmailTemplatesPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
@@ -51,6 +54,10 @@ const App = () => (
             <Route path="/admin/products" element={<ProductsPage />} />
             <Route path="/admin/payments" element={<PaymentsPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
+            <Route path="/admin/whatsapp" element={<WhatsAppActivitiesPage />} />
+            <Route path="/admin/whatsapp-templates" element={<WhatsAppTemplatesPage />} />
+            <Route path="/admin/email" element={<EmailActivitiesPage />} />
+            <Route path="/admin/email-templates" element={<EmailTemplatesPage />} />
             
             {/* Catch-all route */}
             <Route path="*" element={<NotFound />} />

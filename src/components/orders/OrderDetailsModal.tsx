@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { Order } from '@/lib/types';
+import { Order } from '@/types/schema';
 import { 
   Dialog, 
   DialogContent, 
@@ -22,17 +21,55 @@ import {
   FileText, 
   MapPin, 
   User, 
-  Clock 
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
+import { useWhatsAppActivities } from '@/hooks/useWhatsAppActivities';
+import { WhatsAppActivities } from './WhatsAppActivities';
+import { SendWhatsAppMessage } from './SendWhatsAppMessage';
 
 interface OrderDetailsModalProps {
   order: Order | null;
   isOpen: boolean;
   onClose: () => void;
   onUpdateStatus: (orderId: string, status: string) => void;
+}
+
+// WhatsApp Activities Tab Component
+function WhatsAppActivitiesTab({ orderId, order }: { orderId: string, order: Order }) {
+  const { activities, isLoading, createActivity } = useWhatsAppActivities(orderId);
+  
+  const handleMessageSent = () => {
+    // This will trigger a refetch of the activities
+    // through the invalidation in the createActivity mutation
+  };
+  
+  return (
+    <div className="space-y-6">
+      {/* Send WhatsApp Message Section */}
+      <div className="border rounded-md p-4">
+        <SendWhatsAppMessage 
+          order={order} 
+          onMessageSent={handleMessageSent} 
+        />
+      </div>
+      
+      {/* WhatsApp Activity History Section */}
+      <div className="border rounded-md p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium">Message History</h3>
+        </div>
+        <WhatsAppActivities 
+          activities={activities} 
+          isLoading={isLoading} 
+          orderId={orderId} 
+        />
+      </div>
+    </div>
+  );
 }
 
 export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
@@ -60,7 +97,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
         </DialogHeader>
         
         <Tabs defaultValue="items">
-          <TabsList className="grid grid-cols-4 mb-4">
+          <TabsList className="grid grid-cols-5 mb-4">
             <TabsTrigger value="items" className="flex items-center">
               <Package size={14} className="mr-2" />
               Items
@@ -76,6 +113,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             <TabsTrigger value="payment" className="flex items-center">
               <CreditCard size={14} className="mr-2" />
               Payment
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp" className="flex items-center">
+              <MessageSquare size={14} className="mr-2" />
+              WhatsApp
             </TabsTrigger>
           </TabsList>
           
@@ -353,6 +394,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 )}
               </div>
             </div>
+          </TabsContent>
+          
+          {/* WhatsApp tab */}
+          <TabsContent value="whatsapp" className="space-y-4">
+            <WhatsAppActivitiesTab orderId={order.id} order={order} />
           </TabsContent>
         </Tabs>
         

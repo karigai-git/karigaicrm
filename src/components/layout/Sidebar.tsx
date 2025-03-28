@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -10,7 +9,9 @@ import {
   CreditCard, 
   Settings, 
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  MessageSquare,
+  Mail
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -65,6 +66,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
     { title: 'Customers', path: '/admin/customers', icon: Users },
     { title: 'Products', path: '/admin/products', icon: Package },
     { title: 'Payments', path: '/admin/payments', icon: CreditCard },
+    { title: 'WhatsApp Activities', path: '/admin/whatsapp', icon: MessageSquare },
+    { title: 'WhatsApp Templates', path: '/admin/whatsapp-templates', icon: MessageSquare },
+    { title: 'Email Activities', path: '/admin/email', icon: Mail },
+    { title: 'Email Templates', path: '/admin/email-templates', icon: Mail },
     { title: 'Settings', path: '/admin/settings', icon: Settings },
   ];
 

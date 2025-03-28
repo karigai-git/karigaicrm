@@ -1,99 +1,147 @@
-
 import React from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DataTable } from '@/components/ui/data-table';
+import { columns } from '@/components/tables/products/columns';
+import { useProducts } from '@/hooks/useProducts';
 import { Button } from '@/components/ui/button';
-import { useQuery } from '@tanstack/react-query';
-import { Search, Package, Plus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { PlusIcon, LayoutGrid, LayoutList } from 'lucide-react';
+import { useState } from 'react';
+import { CreateProductDialog } from '@/components/dialogs/CreateProductDialog';
+import { ViewProductDialog } from '@/components/dialogs/ViewProductDialog';
+import { EditProductDialog } from '@/components/dialogs/EditProductDialog';
+import { Product } from '@/types/schema';
+import { Input } from '@/components/ui/input';
+import { CustomPagination } from '@/components/ui/custom-pagination';
+import { ProductCardGrid } from '@/components/cards/ProductCardGrid';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
-// This is a placeholder component - in a real implementation, this would fetch actual product data
+type ViewMode = 'table' | 'card';
+
 const ProductsPage = () => {
-  const { data: products, isLoading, error } = useQuery({
-    queryKey: ['products'],
-    queryFn: async () => {
-      // Placeholder for actual API call
-      return [
-        { id: '1', name: 'Coffee Beans - Dark Roast', price: 14.99, stock: 45, category: 'Coffee Beans' },
-        { id: '2', name: 'Coffee Beans - Medium Roast', price: 12.99, stock: 30, category: 'Coffee Beans' },
-        { id: '3', name: 'Coffee Grinder', price: 59.99, stock: 15, category: 'Equipment' },
-        { id: '4', name: 'Coffee Filter Papers', price: 4.99, stock: 100, category: 'Accessories' },
-        { id: '5', name: 'Coffee Mug', price: 9.99, stock: 25, category: 'Accessories' },
-      ];
-    },
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const [viewMode, setViewMode] = useState<ViewMode>('card'); 
+  const perPage = 10;
+
+  const { 
+    products, 
+    isLoading, 
+    error, 
+    totalPages,
+    createProduct,
+    updateProduct,
+    refetch 
+  } = useProducts({
+    page,
+    perPage,
+    searchTerm,
+    sort: '-created'
   });
+
+  const handleViewProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    setPage(1); // Reset to first page on new search
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleViewModeChange = (value: string) => {
+    if (value) {
+      setViewMode(value as ViewMode);
+    }
+  };
+
+  if (error) {
+    return <div className="p-4">Error loading products: {error.message}</div>;
+  }
 
   return (
     <AdminLayout>
-      <div className="space-y-4">
+      <div className="space-y-4 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
-          <div className="flex items-center space-x-2">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search products..."
-                className="w-64 pl-8"
-              />
-            </div>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
-          </div>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <PlusIcon className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Product Inventory</CardTitle>
-            <CardDescription>Manage your products, prices, and stock levels.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex justify-center p-4">Loading products...</div>
-            ) : error ? (
-              <div className="text-red-500 p-4">Error loading products</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">Product</th>
-                      <th className="text-left p-2">Category</th>
-                      <th className="text-right p-2">Price</th>
-                      <th className="text-right p-2">Stock</th>
-                      <th className="text-right p-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products?.map((product) => (
-                      <tr key={product.id} className="border-b hover:bg-muted/50">
-                        <td className="p-2 flex items-center gap-2">
-                          <Package className="h-4 w-4 text-muted-foreground" />
-                          {product.name}
-                        </td>
-                        <td className="p-2">
-                          <Badge variant="outline">{product.category}</Badge>
-                        </td>
-                        <td className="p-2 text-right">${product.price.toFixed(2)}</td>
-                        <td className="p-2 text-right">
-                          <span className={product.stock < 20 ? "text-destructive font-medium" : ""}>
-                            {product.stock}
-                          </span>
-                        </td>
-                        <td className="p-2 text-right">
-                          <Button variant="ghost" size="sm">Edit</Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="flex items-center justify-between space-x-2 pb-4">
+          <Input
+            placeholder="Search products..."
+            value={searchTerm}
+            onChange={handleSearch}
+            className="max-w-sm"
+          />
+          
+          <ToggleGroup type="single" value={viewMode} onValueChange={handleViewModeChange}>
+            <ToggleGroupItem value="table" aria-label="Table view">
+              <LayoutList className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="card" aria-label="Card view">
+              <LayoutGrid className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        {viewMode === 'table' ? (
+          <DataTable
+            columns={columns(handleViewProduct, handleEditProduct)}
+            data={products}
+            isLoading={isLoading}
+            searchField="name"
+          />
+        ) : (
+          <ProductCardGrid
+            products={products}
+            onView={handleViewProduct}
+            onEdit={handleEditProduct}
+            isLoading={isLoading}
+          />
+        )}
+
+        {totalPages > 1 && (
+          <CustomPagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
+        )}
+
+        <CreateProductDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          onSubmit={createProduct.mutateAsync}
+        />
+
+        <ViewProductDialog
+          open={isViewDialogOpen}
+          onOpenChange={setIsViewDialogOpen}
+          product={selectedProduct}
+        />
+
+        <EditProductDialog
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+          product={selectedProduct}
+          onSubmit={updateProduct.mutateAsync}
+        />
       </div>
     </AdminLayout>
   );

@@ -1,78 +1,30 @@
-
 import React, { useState } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { OrdersTable } from '@/components/orders/OrdersTable';
-import { OrderDetailsModal } from '@/components/orders/OrderDetailsModal';
-import { Order, OrderStatus } from '@/lib/types';
-import { useToast } from '@/hooks/use-toast';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getOrders, updateOrderStatus } from '@/lib/pocketbase';
-import { mapPocketBaseOrderToOrder } from '@/lib/mapper';
+import { DataTable } from '@/components/ui/data-table';
+import { columns } from '@/components/tables/orders/columns';
+import { useOrders } from '@/hooks/useOrders';
+import { Button } from '@/components/ui/button';
+import { PlusIcon } from 'lucide-react';
+import { CreateOrderDialog } from '@/components/dialogs/CreateOrderDialog';
+import { ViewOrderDialog } from '@/components/dialogs/ViewOrderDialog';
+import { Order } from '@/types/schema';
 
 const OrdersPage: React.FC = () => {
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  // Fetch orders from PocketBase
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['orders'],
-    queryFn: getOrders,
-  });
-
-  // Map PocketBase records to our Order type
-  const orders = data?.items.map(mapPocketBaseOrderToOrder) || [];
-
-  // Update order status mutation
-  const updateOrderMutation = useMutation({
-    mutationFn: ({ orderId, status }: { orderId: string; status: OrderStatus }) => 
-      updateOrderStatus(orderId, status),
-    onSuccess: () => {
-      // Invalidate orders query to refetch updated data
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-    },
-  });
+  const { orders, isLoading, error, createOrder } = useOrders();
 
   const handleViewOrder = (order: Order) => {
     setSelectedOrder(order);
-    setIsModalOpen(true);
-  };
-
-  const handleUpdateOrderStatus = (orderId: string, status: OrderStatus) => {
-    updateOrderMutation.mutate(
-      { orderId, status },
-      {
-        onSuccess: () => {
-          toast({
-            title: 'Order Updated',
-            description: `Order ${orderId.slice(0, 8)} status changed to ${status}`,
-          });
-          
-          if (selectedOrder && selectedOrder.id === orderId) {
-            setSelectedOrder({
-              ...selectedOrder,
-              status: status,
-              updated: new Date().toISOString()
-            });
-          }
-        },
-        onError: (error) => {
-          toast({
-            title: 'Update Failed',
-            description: `Failed to update order status: ${error}`,
-            variant: 'destructive',
-          });
-        },
-      }
-    );
+    setIsViewDialogOpen(true);
   };
 
   if (error) {
     return (
       <AdminLayout>
         <div className="p-4 text-red-500">
-          Error loading orders: {(error as Error).message}
+          Error loading orders: {error.message}
         </div>
       </AdminLayout>
     );
@@ -80,26 +32,32 @@ const OrdersPage: React.FC = () => {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Orders</h1>
-            <p className="text-muted-foreground">Manage and process customer orders</p>
-          </div>
+      <div className="flex flex-col gap-4 p-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Orders</h1>
+          <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <PlusIcon className="mr-2 h-4 w-4" />
+            Add Order
+          </Button>
         </div>
-        
-        <OrdersTable 
-          orders={orders}
+
+        <DataTable
+          columns={columns(handleViewOrder)}
+          data={orders}
           isLoading={isLoading}
-          onViewOrder={handleViewOrder}
-          onUpdateStatus={handleUpdateOrderStatus}
+          searchField="id"
         />
-        
-        <OrderDetailsModal 
+
+        <CreateOrderDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          onSubmit={createOrder.mutateAsync}
+        />
+
+        <ViewOrderDialog
+          open={isViewDialogOpen}
+          onOpenChange={setIsViewDialogOpen}
           order={selectedOrder}
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          onUpdateStatus={handleUpdateOrderStatus}
         />
       </div>
     </AdminLayout>

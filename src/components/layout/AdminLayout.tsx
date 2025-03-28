@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Bell, User, Menu } from 'lucide-react';
@@ -14,6 +13,9 @@ import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { pb } from '@/lib/pocketbase';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -22,6 +24,7 @@ interface AdminLayoutProps {
 export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
   const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Close sidebar when switching to mobile view
@@ -29,6 +32,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       setIsSidebarOpen(false);
     }
   }, [isMobile]);
+
+  const handleLogout = () => {
+    try {
+      pb.authStore.clear();
+      toast.success('Logged out successfully');
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to log out');
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -101,7 +115,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
                 <DropdownMenuItem>Profile</DropdownMenuItem>
                 <DropdownMenuItem>Settings</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Log out</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout}>Log out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
