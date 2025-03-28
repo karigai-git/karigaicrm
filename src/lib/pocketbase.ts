@@ -17,8 +17,8 @@ export const initAdmin = async (retryCount = 0) => {
     
     // Set a timeout for the authentication request
     const authPromise = pb.admins.authWithPassword(
-      'nnirmal7107@gmail.com',
-      'Kamala@7107'
+      import.meta.env.POCKETBASE_ADMIN_EMAIL || 'nnirmal7107@gmail.com',
+      import.meta.env.POCKETBASE_ADMIN_PASSWORD || 'Kamala@7107'
     );
     
     const timeoutPromise = new Promise((_, reject) => {
@@ -83,11 +83,11 @@ export const authenticateAdmin = async (email: string, password: string) => {
 };
 
 // Helper functions for orders
-export const getOrders = async () => {
+export const getOrders = async (limit = 50) => {
   try {
     await ensureAdminAuth();
-    const records = await pb.collection('orders').getList(1, 50, {
-      sort: 'created', 
+    const records = await pb.collection('orders').getList(1, limit, {
+      sort: '-created', 
       expand: 'user_id,shipping_address',
     });
     return records;
@@ -117,6 +117,100 @@ export const updateOrderStatus = async (id: string, status: string) => {
     return record;
   } catch (error) {
     console.error(`Error updating order ${id}:`, error);
+    throw error;
+  }
+};
+
+// Get dashboard metrics
+export const getDashboardMetrics = async () => {
+  try {
+    await ensureAdminAuth();
+    
+    // Get all orders to calculate metrics
+    const ordersResult = await pb.collection('orders').getFullList({
+      sort: '-created',
+    });
+    
+    // Calculate the metrics
+    const totalOrders = ordersResult.length;
+    
+    const pendingOrders = ordersResult.filter(
+      order => order.status === 'pending' || order.status === 'processing'
+    ).length;
+    
+    const completedOrders = ordersResult.filter(
+      order => order.status === 'delivered'
+    ).length;
+    
+    // Calculate revenue metrics
+    const totalRevenue = ordersResult.reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    const averageOrderValue = totalOrders > 0 
+      ? totalRevenue / totalOrders 
+      : 0;
+    
+    // Calculate today's revenue
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const revenueToday = ordersResult
+      .filter(order => {
+        const orderDate = new Date(order.created);
+        return orderDate >= today;
+      })
+      .reduce((sum, order) => sum + (order.total || 0), 0);
+    
+    return {
+      total_orders: totalOrders,
+      pending_orders: pendingOrders,
+      completed_orders: completedOrders,
+      total_revenue: totalRevenue,
+      average_order_value: averageOrderValue,
+      revenue_today: revenueToday
+    };
+  } catch (error) {
+    console.error('Error fetching dashboard metrics:', error);
+    throw error;
+  }
+};
+
+// Get revenue data for chart (monthly revenue)
+export const getMonthlyRevenueData = async () => {
+  try {
+    await ensureAdminAuth();
+    
+    // Get all orders
+    const ordersResult = await pb.collection('orders').getFullList({
+      sort: 'created',
+    });
+    
+    // Get current year
+    const currentYear = new Date().getFullYear();
+    
+    // Create an object to store monthly revenue
+    const monthlyRevenue = {
+      'Jan': 0, 'Feb': 0, 'Mar': 0, 'Apr': 0, 'May': 0, 'Jun': 0,
+      'Jul': 0, 'Aug': 0, 'Sep': 0, 'Oct': 0, 'Nov': 0, 'Dec': 0
+    };
+    
+    // Calculate revenue for each month
+    ordersResult.forEach(order => {
+      const orderDate = new Date(order.created);
+      
+      // Only include orders from current year
+      if (orderDate.getFullYear() === currentYear) {
+        const month = orderDate.toLocaleString('default', { month: 'short' });
+        monthlyRevenue[month] += (order.total || 0);
+      }
+    });
+    
+    // Convert to array format expected by chart
+    return Object.entries(monthlyRevenue).map(([month, revenue]) => ({
+      month,
+      revenue
+    }));
+  } catch (error) {
+    console.error('Error fetching monthly revenue data:', error);
     throw error;
   }
 };
