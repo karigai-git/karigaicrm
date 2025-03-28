@@ -107,6 +107,24 @@ async function logEmailActivity(activity: EmailActivity) {
   }
 }
 
+// CORS middleware to add headers to all responses
+const addCorsHeaders = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Allow requests from any origin
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send();
+  }
+  
+  next();
+};
+
+// Apply CORS middleware to all routes
+router.use(addCorsHeaders);
+
 // Health check endpoint
 router.get('/status', async (req, res) => {
   try {
