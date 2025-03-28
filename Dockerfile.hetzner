@@ -93,6 +93,9 @@ RUN echo '#!/bin/sh\n\
 # Start the email server in the background\n\
 cd /app && tsx src/server/index.ts &\n\
 \n\
+# Start the frontend server\n\
+cd /app && npx serve -s dist -p 80 &\n\
+\n\
 # Start nginx in the foreground\n\
 nginx -g "daemon off;"\n\
 ' > /start.sh && chmod +x /start.sh

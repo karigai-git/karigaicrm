@@ -67,7 +67,8 @@ RUN npm run build:server
 # Create a start script
 RUN echo '#!/bin/sh\n\
 echo "Starting servers..."\n\
-serve -s dist -p 8080 & tsx src/server/index.ts\n\
+npx serve -s dist -p 8080 &\n\
+cd /app && tsx src/server/index.ts\n\
 ' > start.sh && chmod +x start.sh
 
 # Expose the ports the app runs on

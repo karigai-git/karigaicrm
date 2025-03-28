@@ -1,0 +1,48 @@
+# Konipai CRM Deployment Commands for Hetzner Server
+
+# 1. Install required packages
+apt-get update && apt-get install -y \
+  curl \
+  git \
+  docker.io \
+  nginx \
+  openssl
+
+# 2. Enable and start Docker
+systemctl enable docker
+systemctl start docker
+
+# 3. Create application directory
+mkdir -p /opt/konipai-crm/ssl
+
+# 4. Clone the repository
+cd /opt/konipai-crm
+git clone https://github.com/rizo8107/konipai-crm-trove.git .
+
+# 5. Create self-signed SSL certificates
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /opt/konipai-crm/ssl/privkey.pem \
+  -out /opt/konipai-crm/ssl/fullchain.pem \
+  -subj "/CN=65.109.167.179" \
+  -addext "subjectAltName = IP:65.109.167.179"
+
+chmod -R 755 /opt/konipai-crm/ssl
+
+# 6. Build Docker image
+cd /opt/konipai-crm
+docker build -t konipai-crm-hetzner -f Dockerfile.hetzner .
+
+# 7. Run Docker container
+docker run -d --name konipai-crm \
+  -p 80:80 \
+  -p 443:443 \
+  -p 3001:3001 \
+  -v /opt/konipai-crm/ssl:/etc/nginx/ssl \
+  --restart unless-stopped \
+  konipai-crm-hetzner
+
+# 8. Check container status
+docker ps
+docker logs konipai-crm
+
+# The application should now be accessible at https://65.109.167.179 
