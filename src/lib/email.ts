@@ -2,8 +2,31 @@ import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
 import { api } from './api';
 
-// Email API URL using the proxy configured in vite.config.js
-const EMAIL_API_URL = '/email-api';
+// Get the Email API URL from environment or use default
+function getEmailApiUrl(): string {
+  const envUrl = import.meta.env.VITE_EMAIL_API_URL;
+  
+  // Default Email API URL
+  const defaultApiUrl = 'https://backend-email.7za6uc.easypanel.host/api/email';
+  
+  if (!envUrl) {
+    console.warn('VITE_EMAIL_API_URL not found in environment. Using default API URL:', defaultApiUrl);
+    return defaultApiUrl;
+  }
+  
+  // For development mode, check if we need to use proxy
+  if (window.location.hostname === 'localhost' && envUrl === '/email-api') {
+    console.log('Development environment detected with proxy path. Using proxy for local development.');
+    return envUrl;
+  }
+  
+  // Use direct URL approach
+  console.log('Using direct Email API URL:', envUrl);
+  return envUrl;
+}
+
+// Set the email API URL - use direct URL in production, proxy in development
+const EMAIL_API_URL = getEmailApiUrl();
 
 // Interface for Email message activity logging
 export interface EmailActivity {
@@ -559,7 +582,7 @@ export async function logEmailActivity(activity: EmailActivity): Promise<void> {
 }
 
 /**
- * Check the email service connection status
+ * Check the Email API connection status
  * @returns Promise with connection status
  */
 export async function checkEmailConnection(): Promise<{
@@ -568,61 +591,54 @@ export async function checkEmailConnection(): Promise<{
   message?: string;
 }> {
   try {
-    console.log('Checking email connection at:', `${EMAIL_API_URL}/connection-status`);
+    const apiUrl = EMAIL_API_URL;
+    const statusEndpoint = apiUrl.endsWith('/') ? 'status' : '/status';
+    const fullUrl = `${apiUrl}${statusEndpoint}`;
     
-    // Use direct axios call with proper headers and error handling
-    const response = await axios.get(`${EMAIL_API_URL}/connection-status`, {
+    console.log('Checking Email connection directly at:', fullUrl);
+    
+    // Make direct API request
+    const response = await axios.get(fullUrl, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'Origin': window.location.origin
       },
-      // Increase timeout for slow server response
       timeout: 5000
     });
     
-    console.log('Email connection check response:', response.data);
+    console.log('Email connection check successful:', response.data);
     
     return {
-      connected: response.data.connected || false,
-      status: response.data.status || 'unknown',
-      message: response.data.message || 'Connection status checked'
+      connected: true,
+      status: response.data.status || 'connected',
+      message: response.data.message || 'Email API is connected'
     };
   } catch (error) {
-    console.error('Error checking email connection:', error);
+    console.error('Error checking Email connection:', error);
     
-    // Provide more detailed error information for debugging
-    let errorMessage = 'Failed to check email connection';
-    let errorStatus = 'error';
-    
+    // Log detailed error information
     if (axios.isAxiosError(error)) {
-      // Extract more specific error information from Axios error
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error('Email server error response:', {
-          status: error.response.status,
-          data: error.response.data
-        });
-        errorMessage = `Email server error: ${error.response.status} - ${error.response.data?.message || 'Unknown error'}`;
-        errorStatus = 'server_error';
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error('No response received from email server');
-        errorMessage = 'Email server is not responding. The server may not be running.';
-        errorStatus = 'no_response';
-      } else {
-        // Something happened in setting up the request
-        errorMessage = `Error setting up request: ${error.message}`;
-        errorStatus = 'request_error';
+      console.error('Email connection error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      
+      if (error.message.includes('Network Error') || error.code === 'ERR_NETWORK') {
+        console.warn('CORS issue detected. Make sure the Email API server allows cross-origin requests from:', window.location.origin);
       }
-    } else if (error instanceof Error) {
-      errorMessage = error.message;
     }
     
+    // Return disconnected status
     return {
       connected: false,
-      status: errorStatus,
-      message: errorMessage
+      status: 'disconnected',
+      message: axios.isAxiosError(error) 
+        ? `Connection error: ${error.message}` 
+        : 'Email API is not connected. Please check console for details.'
     };
   }
 }

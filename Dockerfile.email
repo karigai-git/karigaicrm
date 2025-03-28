@@ -1,0 +1,66 @@
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Install app dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy app source
+COPY . .
+
+# Build if needed
+RUN npm run build-server
+
+# Expose port
+EXPOSE 3001
+
+# Start the server
+CMD ["node", "dist-server/server/index.js"]
+
+FROM nginx:alpine AS production
+
+# Create nginx configuration
+RUN echo 'server { \
+    listen 80; \
+    server_name backend-email.7za6uc.easypanel.host; \
+    \
+    location / { \
+        # CORS Headers for direct API access \
+        if ($request_method = "OPTIONS") { \
+            add_header "Access-Control-Allow-Origin" "*" always; \
+            add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS, PUT, DELETE" always; \
+            add_header "Access-Control-Allow-Headers" "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Origin" always; \
+            add_header "Access-Control-Max-Age" 1728000 always; \
+            add_header "Content-Type" "text/plain charset=UTF-8" always; \
+            add_header "Content-Length" 0 always; \
+            return 204; \
+        } \
+        \
+        # Add CORS headers to all other responses \
+        add_header "Access-Control-Allow-Origin" "*" always; \
+        add_header "Access-Control-Allow-Methods" "GET, POST, OPTIONS, PUT, DELETE" always; \
+        add_header "Access-Control-Allow-Headers" "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Origin" always; \
+        add_header "Access-Control-Expose-Headers" "Content-Length,Content-Range" always; \
+        \
+        # Proxy to the Email API service \
+        proxy_pass http://localhost:3001; \
+        proxy_http_version 1.1; \
+        proxy_set_header Upgrade $http_upgrade; \
+        proxy_set_header Connection "upgrade"; \
+        proxy_set_header Host $host; \
+        proxy_cache_bypass $http_upgrade; \
+        \
+        # Log request details for debugging \
+        access_log /var/log/nginx/email-api-access.log; \
+        error_log /var/log/nginx/email-api-error.log; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+# Copy the Node.js app from the builder stage
+COPY --from=builder /app /app
+
+# Start Nginx
+CMD ["nginx", "-g", "daemon off;"] 

@@ -2,32 +2,29 @@ import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
 
 /**
- * Gets the WhatsApp API URL from environment or proxy configuration
+ * Gets the WhatsApp API URL from environment or direct API URL
  * @returns The URL to use for WhatsApp API calls
  */
 export function getWhatsAppApiUrl(): string {
   // Get the API URL from the environment variables
   const envUrl = import.meta.env.VITE_WHATSAPP_API_URL;
   
+  // Default WhatsApp API URL if environment variable is not set
+  const defaultApiUrl = 'https://backend-whatsappapi.7za6uc.easypanel.host';
+  
   if (!envUrl) {
-    console.warn('VITE_WHATSAPP_API_URL not found in environment. Falling back to proxy path.');
-    return '/whatsapp-api';
+    console.warn('VITE_WHATSAPP_API_URL not found in environment. Using default API URL:', defaultApiUrl);
+    return defaultApiUrl;
   }
   
-  // For Easypanel hosted environments, always use the proxy to avoid CORS issues
-  if (window.location.hostname.includes('easypanel.host')) {
-    console.log('Easypanel environment detected. Using proxy path for WhatsApp API');
-    return '/whatsapp-api';
+  // For development mode, check if we need to use proxy
+  if (window.location.hostname === 'localhost' && envUrl === '/whatsapp-api') {
+    console.log('Development environment detected with proxy path. Using proxy for local development.');
+    return envUrl;
   }
   
-  // If in development mode and using localhost, use the proxy
-  if (window.location.hostname === 'localhost' && !envUrl.startsWith('/whatsapp-api')) {
-    console.log('Development environment detected. Using proxy path for WhatsApp API');
-    return '/whatsapp-api';
-  }
-  
-  // For production or if explicitly set to use proxy
-  console.log('Using WhatsApp API URL:', envUrl);
+  // Use direct URL approach
+  console.log('Using direct WhatsApp API URL:', envUrl);
   return envUrl;
 }
 
@@ -1211,65 +1208,37 @@ export async function checkWhatsAppConnection(): Promise<{
   message?: string;
 }> {
   try {
-    // Get the API URL dynamically (to ensure we have the latest)
+    // Get the API URL dynamically
     const apiUrl = getWhatsAppApiUrl();
-    console.log('Checking WhatsApp connection at:', apiUrl + '/status');
+    const statusEndpoint = apiUrl.endsWith('/') ? 'status' : '/status';
+    const fullUrl = `${apiUrl}${statusEndpoint}`;
     
-    // Try using the proxy path first
-    try {
-      // Always use the proxy path when checking connection to avoid CORS issues
-      const response = await axios.get(`${apiUrl}/status`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        // Add timeout to prevent long waiting times
-        timeout: 5000
-      });
-      
-      console.log('WhatsApp connection check successful:', response.data);
-      
-      // Return the connection status
-      return {
-        connected: true,
-        status: response.data.status || 'connected',
-        message: response.data.message || 'WhatsApp API is connected'
-      };
-    } catch (proxyError) {
-      // If proxy fails due to CORS or other error, try a server-side check via our backend
-      console.warn('Proxy request failed, attempting server-side check:', proxyError.message);
-      
-      // Use the email-api proxy as a server-side CORS proxy to check WhatsApp connection
-      const serverCheckResponse = await axios.get('/email-api/check-whatsapp-connection', {
-        timeout: 8000
-      });
-      
-      if (serverCheckResponse.data?.connected) {
-        console.log('Server-side WhatsApp connection check successful');
-        return {
-          connected: true,
-          status: serverCheckResponse.data.status || 'connected',
-          message: serverCheckResponse.data.message || 'WhatsApp API is connected (via server check)'
-        };
-      }
-      
-      // If server-side check also fails, throw the original error
-      throw proxyError;
-    }
+    console.log('Checking WhatsApp connection directly at:', fullUrl);
+    
+    // Make direct API request
+    const response = await axios.get(fullUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Origin': window.location.origin
+      },
+      // Add timeout to prevent long waiting times
+      timeout: 5000
+    });
+    
+    console.log('WhatsApp connection check successful:', response.data);
+    
+    // Return the connection status
+    return {
+      connected: true,
+      status: response.data.status || 'connected',
+      message: response.data.message || 'WhatsApp API is connected'
+    };
   } catch (error) {
     console.error('Error checking WhatsApp connection:', error);
     
-    // Check for CORS-related errors and provide helpful debug info
+    // Log detailed error information
     if (axios.isAxiosError(error)) {
-      if (error.message.includes('Network Error')) {
-        console.warn('Possible CORS issue. Make sure the WhatsApp API server has appropriate CORS headers enabled.');
-      }
-      
-      if (error.code === 'ECONNABORTED') {
-        console.warn('Connection timeout. The WhatsApp API server might be down or slow to respond.');
-      }
-      
-      // Log more detailed error information for debugging
       console.error('WhatsApp connection error details:', {
         message: error.message,
         code: error.code,
@@ -1277,9 +1246,14 @@ export async function checkWhatsAppConnection(): Promise<{
         statusText: error.response?.statusText,
         data: error.response?.data
       });
+      
+      // If this is a CORS error, provide helpful message
+      if (error.message.includes('Network Error') || error.code === 'ERR_NETWORK') {
+        console.warn('CORS issue detected. Make sure the WhatsApp API server allows cross-origin requests from:', window.location.origin);
+      }
     }
     
-    // Return disconnected status with more detailed message
+    // Return disconnected status with detailed message
     return {
       connected: false,
       status: 'disconnected',
