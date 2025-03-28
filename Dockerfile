@@ -13,11 +13,11 @@ RUN npm install
 # Copy the rest of the application code
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build both the frontend and server
+RUN npm run build:all
 
-# Expose the port the app runs on
-EXPOSE 4000
+# Expose the ports the app runs on
+EXPOSE 4000 8080
 
 # Start the server
 CMD ["npm", "run", "start:server"]
