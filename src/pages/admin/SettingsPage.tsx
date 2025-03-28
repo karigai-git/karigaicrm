@@ -40,6 +40,15 @@ const notificationFormSchema = z.object({
   paymentNotifications: z.boolean().default(true),
 });
 
+const securityFormSchema = z.object({
+  currentPassword: z.string().min(1, { message: "Current password is required" }),
+  newPassword: z.string().min(8, { message: "Password must be at least 8 characters" }),
+  confirmPassword: z.string().min(8, { message: "Password must be at least 8 characters" }),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
+
 const SettingsPage = () => {
   const generalForm = useForm<z.infer<typeof generalFormSchema>>({
     resolver: zodResolver(generalFormSchema),
@@ -62,6 +71,15 @@ const SettingsPage = () => {
       paymentNotifications: true,
     },
   });
+  
+  const securityForm = useForm<z.infer<typeof securityFormSchema>>({
+    resolver: zodResolver(securityFormSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
 
   const onGeneralSubmit = (data: z.infer<typeof generalFormSchema>) => {
     console.log("General settings updated:", data);
@@ -70,6 +88,11 @@ const SettingsPage = () => {
 
   const onNotificationSubmit = (data: z.infer<typeof notificationFormSchema>) => {
     console.log("Notification settings updated:", data);
+    // Here you would update the settings via API
+  };
+  
+  const onSecuritySubmit = (data: z.infer<typeof securityFormSchema>) => {
+    console.log("Security settings updated:", data);
     // Here you would update the settings via API
   };
 
@@ -299,27 +322,58 @@ const SettingsPage = () => {
                 <CardDescription>Manage your account security and password.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <h3 className="font-medium">Change Password</h3>
-                  <Separator />
-                  <div className="space-y-4 pt-2">
-                    <div className="grid gap-4">
-                      <div>
-                        <FormLabel>Current Password</FormLabel>
-                        <Input type="password" />
-                      </div>
-                      <div>
-                        <FormLabel>New Password</FormLabel>
-                        <Input type="password" />
-                      </div>
-                      <div>
-                        <FormLabel>Confirm New Password</FormLabel>
-                        <Input type="password" />
+                <Form {...securityForm}>
+                  <form onSubmit={securityForm.handleSubmit(onSecuritySubmit)} className="space-y-4">
+                    <div className="space-y-2">
+                      <h3 className="font-medium">Change Password</h3>
+                      <Separator />
+                      <div className="space-y-4 pt-2">
+                        <div className="grid gap-4">
+                          <FormField
+                            control={securityForm.control}
+                            name="currentPassword"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Current Password</FormLabel>
+                                <FormControl>
+                                  <Input type="password" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={securityForm.control}
+                            name="newPassword"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>New Password</FormLabel>
+                                <FormControl>
+                                  <Input type="password" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={securityForm.control}
+                            name="confirmPassword"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Confirm New Password</FormLabel>
+                                <FormControl>
+                                  <Input type="password" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <Button type="submit">Update Password</Button>
                       </div>
                     </div>
-                    <Button>Update Password</Button>
-                  </div>
-                </div>
+                  </form>
+                </Form>
                 
                 <div className="space-y-2 pt-4">
                   <h3 className="font-medium">Two-Factor Authentication</h3>
