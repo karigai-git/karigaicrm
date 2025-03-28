@@ -50,8 +50,16 @@ export function EmailActivities({ activities, isLoading = false, orderId }: Emai
   
   // Filter activities by orderId if provided
   const filteredActivities = orderId
-    ? activities.filter(activity => activity.order_id === orderId)
+    ? activities.filter(activity => {
+        console.log('Filtering activity:', activity);
+        console.log('Activity order_id:', activity.order_id);
+        console.log('Comparing with orderId:', orderId);
+        return activity.order_id === orderId;
+      })
     : activities;
+
+  console.log('Filtered activities:', filteredActivities);
+  console.log('All activities:', activities);
 
   if (isLoading) {
     return (

@@ -33,7 +33,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { pb } from '@/lib/pocketbase';
+import { pb, ensureAdminAuth } from '@/lib/pocketbase';
 
 interface SendEmailMessageProps {
   order: Order;
@@ -154,54 +154,42 @@ export function SendEmailMessage({ order, onMessageSent, onEmailSent }: SendEmai
         
         // If not available in the order object, try to fetch from PocketBase
         try {
-          // Fetch order items
-          const orderItemsResponse = await pb.collection('order_items').getList(1, 50, {
-            filter: `order_id="${order.id}"`,
-          });
-
-          // Define types for PocketBase response
-          interface PocketBaseItem {
-            id: string;
-            name?: string;
-            price?: number;
-            quantity?: number;
-            product_id?: string;
-          }
-
-          // First get the order items
-          const items = orderItemsResponse.items as PocketBaseItem[];
+          // Ensure we're authenticated before making the request
+          await ensureAdminAuth();
           
-          // Then fetch product details for each item if needed
-          const parsedItems: ParsedOrderItem[] = [];
+          // Fetch order details from the orders collection
+          const orderResponse = await pb.collection('orders').getOne(order.id);
           
-          for (const item of items) {
-            let productName = item.name || 'Unknown Product';
-            let productPrice = item.price || 0;
-            let productImage: string | undefined = undefined;
-            
-            // If we have a product_id, try to fetch the product details
-            if (item.product_id) {
-              try {
-                const product = await pb.collection('products').getOne(item.product_id);
-                productName = product.name || productName;
-                productPrice = product.price || productPrice;
-                productImage = product.images && product.images.length > 0 ? product.images[0] : undefined;
-              } catch (productErr) {
-                console.warn(`Could not fetch product details for ${item.product_id}:`, productErr);
-                // Continue with the item data we have
+          // Extract products from the order
+          let orderProducts = [];
+          if (orderResponse.products) {
+            try {
+              // Try to parse products if it's a string
+              if (typeof orderResponse.products === 'string') {
+                orderProducts = JSON.parse(orderResponse.products);
+              } else if (Array.isArray(orderResponse.products)) {
+                orderProducts = orderResponse.products;
+              } else if (typeof orderResponse.products === 'object') {
+                orderProducts = [orderResponse.products];
               }
+            } catch (parseError) {
+              console.warn('Error parsing products from order:', parseError);
             }
-            
-            parsedItems.push({
-              id: item.id,
-              name: productName,
-              price: productPrice,
-              quantity: item.quantity || 1,
-              image: productImage,
-            });
           }
-
-          setOrderItems(parsedItems);
+          
+          // Convert to parsed order items
+          const parsedItems: ParsedOrderItem[] = orderProducts.map(item => ({
+            id: item.id || `temp-${Math.random().toString(36).substring(2, 9)}`,
+            name: item.name || item.product?.name || 'Product',
+            price: item.price || item.product?.price || 0,
+            quantity: item.quantity || 1,
+            image: item.image || (item.product?.images && item.product.images.length > 0 ? item.product.images[0] : undefined),
+          }));
+          
+          if (parsedItems.length > 0) {
+            setOrderItems(parsedItems);
+            return;
+          }
         } catch (pbError) {
           console.warn('Error fetching from PocketBase:', pbError);
           
@@ -443,7 +431,15 @@ export function SendEmailMessage({ order, onMessageSent, onEmailSent }: SendEmai
           }
           default:
             // For other templates, send a generic email
-            response = await sendEmailMessage(recipientEmail, emailSubject, emailContent);
+            response = await sendEmailMessage(
+              recipientEmail, 
+              emailSubject, 
+              emailContent, 
+              {
+                orderId: order.id,
+                templateName: selectedTemplate
+              }
+            );
             break;
         }
       } else {
@@ -454,7 +450,15 @@ export function SendEmailMessage({ order, onMessageSent, onEmailSent }: SendEmai
         
         if (selectedMessageType === 'text') {
           // Send plain text email
-          response = await sendEmailMessage(recipientEmail, customSubject, customMessage);
+          response = await sendEmailMessage(
+            recipientEmail, 
+            customSubject, 
+            customMessage, 
+            {
+              orderId: order.id,
+              templateName: 'custom_email'
+            }
+          );
         } else if (selectedMessageType === 'attachment' && file) {
           // Send email with attachment
           const reader = new FileReader();
@@ -479,7 +483,11 @@ export function SendEmailMessage({ order, onMessageSent, onEmailSent }: SendEmai
             recipientEmail,
             customSubject,
             customMessage,
-            [{ filename: file.name, content: fileContent, contentType: file.type }]
+            [{ filename: file.name, content: fileContent, contentType: file.type }],
+            {
+              orderId: order.id,
+              templateName: 'custom_email_with_attachment'
+            }
           );
         } else {
           throw new Error('Invalid message type or missing attachment');

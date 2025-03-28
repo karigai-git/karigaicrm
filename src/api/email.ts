@@ -17,11 +17,33 @@ interface EmailActivity {
 const router = express.Router();
 
 // Initialize PocketBase for logging activities
-const pb = new PocketBase(process.env.VITE_POCKETBASE_URL || 'http://127.0.0.1:8090');
+const pb = new PocketBase(process.env.VITE_POCKETBASE_URL || 'https://backend-pocketbase.7za6uc.easypanel.host');
+
+// Ensure admin authentication for PocketBase
+async function ensureAdminAuth() {
+  try {
+    // Check if already authenticated
+    if (pb.authStore.isValid) {
+      return;
+    }
+    
+    // Authenticate with admin credentials
+    await pb.admins.authWithPassword(
+      process.env.POCKETBASE_ADMIN_EMAIL || 'admin@example.com',
+      process.env.POCKETBASE_ADMIN_PASSWORD || 'password123'
+    );
+    
+    console.log('Admin authenticated successfully in email API');
+  } catch (error) {
+    console.error('Error authenticating admin in email API:', error);
+    throw error;
+  }
+}
 
 // Ensure the email_activities collection exists
 async function ensureEmailActivitiesCollection() {
   try {
+    await ensureAdminAuth();
     const collections = await pb.collections.getFullList();
     const collectionExists = collections.some(c => c.name === 'email_activities');
     
@@ -75,6 +97,7 @@ async function ensureEmailActivitiesCollection() {
 // Log email activity to PocketBase
 async function logEmailActivity(activity: EmailActivity) {
   try {
+    await ensureAdminAuth();
     await ensureEmailActivitiesCollection();
     await pb.collection('email_activities').create(activity);
     console.log('Email activity logged:', activity);
@@ -82,6 +105,21 @@ async function logEmailActivity(activity: EmailActivity) {
     console.error('Error logging email activity:', error);
   }
 }
+
+// Health check endpoint
+router.get('/status', async (req, res) => {
+  try {
+    const status = await checkEmailConnection();
+    return res.status(status.connected ? 200 : 500).json(status);
+  } catch (error) {
+    console.error('Error checking email connection:', error);
+    return res.status(500).json({
+      connected: false,
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to check email connection'
+    });
+  }
+});
 
 // Send email endpoint
 router.post('/send-email', async (req, res) => {
@@ -195,7 +233,7 @@ router.post('/log-activity', async (req, res) => {
 });
 
 // Check email connection status endpoint
-router.get('/status', async (req, res) => {
+router.get('/connection-status', async (req, res) => {
   try {
     const status = await checkEmailConnection();
     return res.status(200).json(status);

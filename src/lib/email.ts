@@ -104,10 +104,11 @@ export async function sendEmailMessage(
       errorMessage = error.message;
     }
     
-    // Return a standardized error response
     return {
       success: false,
-      message: errorMessage
+      message: errorMessage,
+      status: 'failed',
+      timestamp: new Date().toISOString()
     };
   }
 }
@@ -176,10 +177,11 @@ export async function sendEmailWithAttachment(
       errorMessage = error.message;
     }
     
-    // Return a standardized error response
     return {
       success: false,
-      message: errorMessage
+      message: errorMessage,
+      status: 'failed',
+      timestamp: new Date().toISOString()
     };
   }
 }
@@ -221,8 +223,11 @@ export async function sendOrderConfirmationEmail(
       <p>Thank you for shopping with us!</p>
     `;
     
-    // Send the email
-    return await sendEmailMessage(to, subject, message);
+    // Send the email with order ID in variables
+    return await sendEmailMessage(to, subject, message, {
+      orderId: order.id,
+      templateName: EmailTemplate.ORDER_CONFIRMATION
+    });
   } catch (error) {
     console.error('Error sending order confirmation email:', error);
     return {
@@ -562,7 +567,7 @@ export async function checkEmailConnection(): Promise<{
   message?: string;
 }> {
   try {
-    const response = await axios.get(`${EMAIL_API_URL}/api/email/status`);
+    const response = await axios.get(`${EMAIL_API_URL}/status`);
     return {
       connected: response.data.connected || false,
       status: response.data.status || 'unknown',
