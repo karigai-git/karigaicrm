@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
-import axios from 'axios';
 import emailRoutes from '../api/email';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -27,60 +26,6 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/email', emailRoutes);
-
-// WhatsApp API proxy
-const WHATSAPP_API_TARGET = process.env.VITE_WHATSAPP_API_URL || 'https://crm-v1.7za6uc.easypanel.host/whatsapp-api';
-
-// Log the SMTP configuration for debugging
-console.log('SMTP Configuration:', {
-  host: process.env.SMTP_HOST || process.env.EMAIL_HOST,
-  port: process.env.SMTP_PORT || process.env.EMAIL_PORT,
-  secure: process.env.SMTP_SECURE === 'true',
-  user: process.env.SMTP_USER || process.env.EMAIL_USER
-});
-
-// Log the WhatsApp API target for debugging
-console.log('WhatsApp API Target:', WHATSAPP_API_TARGET);
-
-// Create WhatsApp API proxy middleware
-app.use('/whatsapp-api', async (req, res) => {
-  try {
-    // Get the target API URL from environment or use default
-    const apiTarget = WHATSAPP_API_TARGET.endsWith('/') 
-      ? WHATSAPP_API_TARGET.slice(0, -1) 
-      : WHATSAPP_API_TARGET;
-      
-    // Build the target URL
-    const targetUrl = `${apiTarget}${req.url}`;
-    console.log(`Proxying WhatsApp API request to: ${targetUrl}`);
-    
-    // Forward the request to the WhatsApp API
-    const response = await axios({
-      method: req.method,
-      url: targetUrl,
-      data: req.method !== 'GET' ? req.body : undefined,
-      headers: {
-        'Content-Type': 'application/json',
-        // Forward other necessary headers
-        ...req.headers as Record<string, string>,
-        // Remove host header to avoid conflicts
-        host: undefined,
-      },
-      validateStatus: () => true, // Always resolve to handle errors ourselves
-    });
-    
-    // Send back the API response
-    res.status(response.status).json(response.data);
-    console.log(`WhatsApp API proxy response status: ${response.status}`);
-  } catch (error) {
-    console.error('WhatsApp API proxy error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error proxying request to WhatsApp API',
-      error: error instanceof Error ? error.message : String(error)
-    });
-  }
-});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

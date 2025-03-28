@@ -1,8 +1,25 @@
 import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
 
-// WhatsApp API URL using environment variable or falling back to proxy for development
-const WHATSAPP_API_URL = import.meta.env.VITE_WHATSAPP_API_URL || '/whatsapp-api';
+/**
+ * Gets the WhatsApp API URL from environment or proxy configuration
+ * @returns The URL to use for WhatsApp API calls
+ */
+export function getWhatsAppApiUrl(): string {
+  // First try to get the API URL from the environment variables
+  const envUrl = import.meta.env.VITE_WHATSAPP_API_URL;
+  
+  // Then try to get it from the .env file via the server environment
+  const envApiUrl = envUrl || '/whatsapp-api';
+  
+  // Log the API URL being used (useful for debugging)
+  console.log('Using WhatsApp API URL:', envApiUrl);
+  
+  return envApiUrl;
+}
+
+// Use the function to set the API URL
+const WHATSAPP_API_URL = getWhatsAppApiUrl();
 
 // Interface for WhatsApp message activity logging
 export interface WhatsAppActivity {
@@ -140,7 +157,7 @@ export async function sendWhatsAppImageMessage(
     } 
     // If it's a PocketBase URL, ensure it's properly formatted
     else if (imageUrl.includes('pocketbase') && !imageUrl.startsWith('http')) {
-      validatedImageUrl = `${import.meta.env.VITE_POCKETBASE_URL}api/files/${imageUrl}`;
+      validatedImageUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/${imageUrl}`;
     }
     // If it's just a partial path (like 'collectionId/recordId/filename.jpg' or 'recordId/filename.jpg')
     else if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
@@ -150,11 +167,11 @@ export async function sendWhatsAppImageMessage(
         // If the path doesn't include the collection ID, add the default one
         if (parts.length === 2) {
           // Assuming format: recordId/filename.jpg
-          validatedImageUrl = `${import.meta.env.VITE_POCKETBASE_URL}api/files/pbc_4092854851/${imageUrl}`;
+          validatedImageUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/pbc_4092854851/${imageUrl}`;
           console.log('Added collection ID to partial URL:', validatedImageUrl);
         } else {
           // Assuming format already includes collection ID: collectionId/recordId/filename.jpg
-          validatedImageUrl = `${import.meta.env.VITE_POCKETBASE_URL}api/files/${imageUrl}`;
+          validatedImageUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/${imageUrl}`;
           console.log('Added base URL to partial path:', validatedImageUrl);
         }
       } else {
@@ -277,7 +294,7 @@ export async function sendWhatsAppVideoMessage(
     if (videoUrl.startsWith('/') || videoUrl.includes('pocketbase')) {
       // For PocketBase URLs, ensure they're properly formatted
       if (videoUrl.includes('pocketbase') && !videoUrl.startsWith('http')) {
-        validatedVideoUrl = `${import.meta.env.VITE_POCKETBASE_URL}api/files/${videoUrl}`;
+        validatedVideoUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/${videoUrl}`;
       } else if (videoUrl.startsWith('/')) {
         // For relative URLs, convert to absolute using the current origin
         validatedVideoUrl = `${window.location.origin}${videoUrl}`;
@@ -376,7 +393,7 @@ export async function sendWhatsAppDocumentMessage(
     if (documentUrl.startsWith('/') || documentUrl.includes('pocketbase')) {
       // For PocketBase URLs, ensure they're properly formatted
       if (documentUrl.includes('pocketbase') && !documentUrl.startsWith('http')) {
-        validatedDocumentUrl = `${import.meta.env.VITE_POCKETBASE_URL}api/files/${documentUrl}`;
+        validatedDocumentUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/${documentUrl}`;
       } else if (documentUrl.startsWith('/')) {
         // For relative URLs, convert to absolute using the current origin
         validatedDocumentUrl = `${window.location.origin}${documentUrl}`;

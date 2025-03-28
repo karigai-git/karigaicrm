@@ -46,9 +46,6 @@ ENV SMTP_PASSWORD=$SMTP_PASSWORD
 ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_WHATSAPP_API_URL=$VITE_WHATSAPP_API_URL
 
-# Install global dependencies
-RUN npm install -g tsx serve
-
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
@@ -61,18 +58,8 @@ COPY . .
 # Build the frontend
 RUN npm run build
 
-# Build the server files
-RUN npm run build:server
-
-# Create a start script
-RUN echo '#!/bin/sh\n\
-echo "Starting servers..."\n\
-npx serve -s dist -p 8080 &\n\
-cd /app && tsx src/server/index.ts\n\
-' > start.sh && chmod +x start.sh
-
 # Expose the ports the app runs on
 EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Start both the frontend and backend servers
-CMD ["./start.sh"]
+# Start the server with tsx (directly running TypeScript)
+CMD ["npm", "run", "start:server"]

@@ -46,31 +46,23 @@ ENV SMTP_PASSWORD=$SMTP_PASSWORD
 ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_WHATSAPP_API_URL=$VITE_WHATSAPP_API_URL
 
-# Install global dependencies
-RUN npm install -g tsx serve
-
 # Copy package files
 COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
+# Add esbuild for server build
+RUN npm install -D esbuild
+
 # Copy all files to the container
 COPY . .
 
 # Build the React app
-RUN npm run build
-
-# Build the server files
-RUN npm run build:server
-
-# Create start.sh script for Easypanel compatibility
-RUN echo '#!/bin/sh' > start.sh && \
-    echo 'npx serve -s dist -p 8080 & tsx src/server/index.ts' >> start.sh && \
-    chmod +x start.sh
+RUN npm run build:all
 
 # Expose the ports the app runs on
 EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Command is empty to let Easypanel's entrypoint handle execution
-CMD ["./start.sh"]
+# Start the server when the container starts
+CMD ["npm", "run", "start:server"]
