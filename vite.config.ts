@@ -29,8 +29,15 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/whatsapp-api/, ''),
           secure: false,
-          // Add CORS headers
           configure: (proxy, _options) => {
+            // Add CORS headers to all responses
+            proxy.on('proxyRes', (proxyRes, _req, _res) => {
+              // Add CORS headers
+              proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+              proxyRes.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS';
+              proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+            });
+            
             proxy.on('error', (err, _req, _res) => {
               console.log('WhatsApp proxy error:', err);
             });
@@ -72,10 +79,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // Make WhatsApp API URL available to the app
-      // In development, use proxy; in production use the actual URL from env
-      'import.meta.env.VITE_WHATSAPP_API_URL': mode === 'development' 
-        ? JSON.stringify('/whatsapp-api')
-        : JSON.stringify(whatsAppApiUrl),
+      // ALWAYS use proxy path for client-side requests to avoid CORS issues
+      'import.meta.env.VITE_WHATSAPP_API_URL': JSON.stringify('/whatsapp-api'),
       // Define email API URL for client-side use
       'import.meta.env.VITE_EMAIL_API_URL': JSON.stringify('/email-api'),
     }

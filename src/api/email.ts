@@ -1,6 +1,7 @@
 import express from 'express';
 import { sendEmail, sendEmailWithAttachment, checkEmailConnection } from '../server/emailService';
 import PocketBase from 'pocketbase';
+import axios from 'axios';
 
 // Define EmailActivity interface here to avoid import issues
 interface EmailActivity {
@@ -243,6 +244,72 @@ router.get('/connection-status', async (req, res) => {
       connected: false,
       status: 'error',
       message: error instanceof Error ? error.message : 'Failed to check email connection status'
+    });
+  }
+});
+
+// CORS proxy for WhatsApp API connection check
+router.get('/check-whatsapp-connection', async (req, res) => {
+  try {
+    console.log('Server-side WhatsApp connection check requested');
+    
+    // Get WhatsApp API URL from environment variables
+    const whatsAppApiUrl = process.env.WHATSAPP_API_URL || 'https://backend-whatsappapi.7za6uc.easypanel.host';
+    console.log('Checking WhatsApp connection at:', whatsAppApiUrl + '/status');
+    
+    // Make a server-side request to the WhatsApp API
+    const response = await axios.get(`${whatsAppApiUrl}/status`, {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      // Add timeout to prevent long waiting times
+      timeout: 8000
+    });
+    
+    console.log('WhatsApp connection check successful:', response.data);
+    
+    // Add CORS headers to the response
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Return the connection status
+    return res.status(200).json({
+      connected: true,
+      status: response.data.status || 'connected',
+      message: response.data.message || 'WhatsApp API is connected (via server proxy)'
+    });
+  } catch (error) {
+    console.error('Error in WhatsApp proxy check:', error);
+    
+    // Add CORS headers even to error responses
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    let errorMessage = 'Failed to connect to WhatsApp API';
+    let errorStatus = 'error';
+    
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        errorMessage = `WhatsApp API error: ${error.response.status} ${error.response.statusText}`;
+        errorStatus = 'api_error';
+      } else if (error.request) {
+        errorMessage = 'No response received from WhatsApp API';
+        errorStatus = 'no_response';
+      } else {
+        errorMessage = error.message;
+        errorStatus = 'request_error';
+      }
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
+    return res.status(500).json({
+      connected: false,
+      status: errorStatus,
+      message: errorMessage
     });
   }
 });

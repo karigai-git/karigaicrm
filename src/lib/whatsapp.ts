@@ -14,6 +14,12 @@ export function getWhatsAppApiUrl(): string {
     return '/whatsapp-api';
   }
   
+  // For Easypanel hosted environments, always use the proxy to avoid CORS issues
+  if (window.location.hostname.includes('easypanel.host')) {
+    console.log('Easypanel environment detected. Using proxy path for WhatsApp API');
+    return '/whatsapp-api';
+  }
+  
   // If in development mode and using localhost, use the proxy
   if (window.location.hostname === 'localhost' && !envUrl.startsWith('/whatsapp-api')) {
     console.log('Development environment detected. Using proxy path for WhatsApp API');
@@ -1207,37 +1213,79 @@ export async function checkWhatsAppConnection(): Promise<{
   try {
     // Get the API URL dynamically (to ensure we have the latest)
     const apiUrl = getWhatsAppApiUrl();
-    console.log('Checking WhatsApp connection at:', apiUrl);
+    console.log('Checking WhatsApp connection at:', apiUrl + '/status');
     
-    // Set up axios request with proper CORS handling
-    const response = await axios.get(`${apiUrl}/status`, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
+    // Try using the proxy path first
+    try {
+      // Always use the proxy path when checking connection to avoid CORS issues
+      const response = await axios.get(`${apiUrl}/status`, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        // Add timeout to prevent long waiting times
+        timeout: 5000
+      });
+      
+      console.log('WhatsApp connection check successful:', response.data);
+      
+      // Return the connection status
+      return {
+        connected: true,
+        status: response.data.status || 'connected',
+        message: response.data.message || 'WhatsApp API is connected'
+      };
+    } catch (proxyError) {
+      // If proxy fails due to CORS or other error, try a server-side check via our backend
+      console.warn('Proxy request failed, attempting server-side check:', proxyError.message);
+      
+      // Use the email-api proxy as a server-side CORS proxy to check WhatsApp connection
+      const serverCheckResponse = await axios.get('/email-api/check-whatsapp-connection', {
+        timeout: 8000
+      });
+      
+      if (serverCheckResponse.data?.connected) {
+        console.log('Server-side WhatsApp connection check successful');
+        return {
+          connected: true,
+          status: serverCheckResponse.data.status || 'connected',
+          message: serverCheckResponse.data.message || 'WhatsApp API is connected (via server check)'
+        };
       }
-    });
-    
-    console.log('WhatsApp connection check successful:', response.data);
-    
-    // Return the connection status
-    return {
-      connected: true,
-      status: response.data.status || 'connected',
-      message: response.data.message || 'WhatsApp API is connected'
-    };
+      
+      // If server-side check also fails, throw the original error
+      throw proxyError;
+    }
   } catch (error) {
     console.error('Error checking WhatsApp connection:', error);
     
-    // Check for CORS-related errors
-    if (axios.isAxiosError(error) && error.message.includes('Network Error')) {
-      console.warn('Possible CORS issue. Make sure the WhatsApp API server has appropriate CORS headers enabled.');
+    // Check for CORS-related errors and provide helpful debug info
+    if (axios.isAxiosError(error)) {
+      if (error.message.includes('Network Error')) {
+        console.warn('Possible CORS issue. Make sure the WhatsApp API server has appropriate CORS headers enabled.');
+      }
+      
+      if (error.code === 'ECONNABORTED') {
+        console.warn('Connection timeout. The WhatsApp API server might be down or slow to respond.');
+      }
+      
+      // Log more detailed error information for debugging
+      console.error('WhatsApp connection error details:', {
+        message: error.message,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
     }
     
-    // Return disconnected status
+    // Return disconnected status with more detailed message
     return {
       connected: false,
       status: 'disconnected',
-      message: 'WhatsApp API is not connected. Please check console for details.'
+      message: axios.isAxiosError(error) 
+        ? `Connection error: ${error.message}` 
+        : 'WhatsApp API is not connected. Please check console for details.'
     };
   }
 }
