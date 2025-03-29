@@ -2,6 +2,15 @@ import express from 'express';
 import { sendEmail, sendEmailWithAttachment, checkEmailConnection } from '../server/emailService';
 import PocketBase from 'pocketbase';
 import axios from 'axios';
+import nodemailer from 'nodemailer';
+import mg from 'nodemailer-mailgun-transport';
+import bodyParser from 'body-parser';
+import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
 // Define EmailActivity interface here to avoid import issues
 interface EmailActivity {
@@ -422,6 +431,123 @@ router.all('/proxy-whatsapp*', async (req, res) => {
         message: 'An unknown error occurred'
       });
     }
+  }
+});
+
+// Direct WhatsApp sending endpoint using curl
+router.post('/direct-whatsapp-send', async (req, res) => {
+  try {
+    console.log('Direct WhatsApp send request received:', req.method);
+    
+    // Get WhatsApp API URL from environment variables
+    const whatsAppApiUrl = process.env.WHATSAPP_API_URL || 'https://backend-whatsappapi.7za6uc.easypanel.host';
+    
+    // Extract data from request
+    const { to, message, type = 'text', mediaUrl, caption, filename } = req.body;
+    
+    if (!to || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required parameters: to and message are required'
+      });
+    }
+    
+    // Determine endpoint based on message type
+    let endpoint = '';
+    switch (type) {
+      case 'text':
+        endpoint = `${whatsAppApiUrl}/send-message`;
+        break;
+      case 'image':
+        endpoint = `${whatsAppApiUrl}/send-image-url`;
+        break;
+      case 'video':
+        endpoint = `${whatsAppApiUrl}/send-video-url`;
+        break;
+      case 'document':
+        endpoint = `${whatsAppApiUrl}/send-document-url`;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          message: `Invalid message type: ${type}`
+        });
+    }
+    
+    // Build curl command
+    let curlCmd = `curl -X POST ${endpoint} -H "Content-Type: application/json" -d '`;
+    
+    // Build data payload based on message type
+    let payload: Record<string, any> = {};
+    
+    if (type === 'text') {
+      payload = {
+        number: to,
+        message: message
+      };
+    } else if (type === 'image') {
+      payload = {
+        number: to,
+        imageUrl: mediaUrl,
+        caption: caption || ''
+      };
+    } else if (type === 'video') {
+      payload = {
+        number: to,
+        videoUrl: mediaUrl,
+        caption: caption || ''
+      };
+    } else if (type === 'document') {
+      payload = {
+        number: to,
+        documentUrl: mediaUrl,
+        filename: filename || 'document.pdf',
+        caption: caption || ''
+      };
+    }
+    
+    // Add the JSON payload to the curl command
+    curlCmd += JSON.stringify(payload) + "'";
+    
+    console.log('Executing curl command:', curlCmd.replace(/'/g, '"')); // Log sanitized version
+    
+    // Execute the curl command
+    const execPromise = promisify(exec);
+    const { stdout, stderr } = await execPromise(curlCmd);
+    
+    if (stderr) {
+      console.error('Curl command error:', stderr);
+    }
+    
+    console.log('Curl command response:', stdout);
+    
+    // Parse the response
+    let responseData;
+    try {
+      responseData = JSON.parse(stdout);
+    } catch (error) {
+      console.error('Error parsing curl response:', error);
+      responseData = { raw: stdout };
+    }
+    
+    // Return the response
+    return res.status(200).json({
+      success: true,
+      message: `WhatsApp ${type} message sent successfully via curl`,
+      ...responseData
+    });
+  } catch (error) {
+    console.error('Error in direct WhatsApp send:', error);
+    
+    // Add CORS headers even to error responses
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'An unknown error occurred'
+    });
   }
 });
 

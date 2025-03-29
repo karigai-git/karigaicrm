@@ -1335,3 +1335,78 @@ export async function checkWhatsAppConnection(): Promise<{
     };
   }
 }
+
+/**
+ * Send a WhatsApp message using server-side curl (avoids CORS issues)
+ * @param to - Recipient phone number
+ * @param message - Message content
+ * @param type - Message type (text, image, video, document)
+ * @param mediaUrl - URL for media content (if applicable)
+ * @param caption - Caption for media (if applicable)
+ * @param filename - Filename for documents (if applicable)
+ */
+export async function sendWhatsAppDirectMessage(
+  to: string,
+  message: string,
+  type: 'text' | 'image' | 'video' | 'document' = 'text',
+  mediaUrl?: string,
+  caption?: string,
+  filename?: string
+): Promise<WhatsAppApiResponse> {
+  try {
+    // Format phone number
+    const formattedPhone = formatPhoneNumber(to);
+    
+    // Prepare the request data
+    const data: Record<string, any> = {
+      to: formattedPhone,
+      message,
+      type
+    };
+    
+    // Add media URL if provided
+    if (mediaUrl && ['image', 'video', 'document'].includes(type)) {
+      data.mediaUrl = mediaUrl;
+    }
+    
+    // Add caption if provided
+    if (caption) {
+      data.caption = caption;
+    }
+    
+    // Add filename if it's a document
+    if (type === 'document' && filename) {
+      data.filename = filename;
+    }
+    
+    console.log('Sending WhatsApp message using direct method:', data);
+    
+    // Send the request to our server-side endpoint that will use curl
+    const response = await axios.post('/email-api/direct-whatsapp-send', data);
+    
+    console.log('Direct WhatsApp send response:', response.data);
+    
+    return {
+      success: true,
+      message: 'Message sent via direct method',
+      messageId: response.data.messageId || response.data.id || 'unknown',
+      status: response.data.status || 'sent',
+      timestamp: response.data.timestamp || new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error sending WhatsApp message via direct method:', error);
+    
+    // Extract error message
+    let errorMessage = 'Failed to send WhatsApp message via direct method';
+    if (axios.isAxiosError(error) && error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
+    return {
+      success: false,
+      message: errorMessage
+    };
+  }
+}
