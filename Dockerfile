@@ -49,17 +49,21 @@ ENV VITE_WHATSAPP_API_URL=$VITE_WHATSAPP_API_URL
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies
+# Install dependencies including dev dependencies needed for build
 RUN npm install
 
 # Copy the rest of the application code
 COPY . .
 
-# Build the frontend
+# Build the frontend and server
 RUN npm run build
+RUN npm run build:server
+
+# Optionally, prune dev dependencies to reduce image size for production
+RUN npm prune --production
 
 # Expose the ports the app runs on
 EXPOSE 8080 3001 3002 3003 3004 4001 4002 4003
 
-# Start the server with tsx (directly running TypeScript)
-CMD ["npm", "run", "start:server"]
+# Start both the server and static file server
+CMD ["sh", "-c", "node dist-server/server/index.js & SERVER_PID=$!; npx serve -s dist -l ${PORT:-8080} & SERVE_PID=$!; trap \"kill $SERVER_PID $SERVE_PID\" SIGINT SIGTERM; wait"]

@@ -3,8 +3,7 @@ aptPkgs = ["nodejs", "npm", "curl", "git"]
 
 [phases.install]
 cmds = [
-  "npm ci --omit=dev --no-audit",   # Use ci for reproducible builds and skip dev dependencies
-  "npm prune --production"          # Remove any leftover dev dependencies
+  "npm install"  # Use full install to include dev dependencies needed for build
 ]
 
 [phases.build]
