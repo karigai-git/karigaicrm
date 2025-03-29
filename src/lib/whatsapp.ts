@@ -6,6 +6,15 @@ import { Order, OrderItem, Product, User } from '@/types/schema';
  * @returns The URL to use for WhatsApp API calls
  */
 export function getWhatsAppApiUrl(): string {
+  // Simple detection of environment
+  const isProduction = window.location.hostname.includes('easypanel.host');
+  
+  // For production environments in Easypanel, use the email API as a proxy
+  if (isProduction) {
+    console.log('Production environment detected, using server-side proxy for WhatsApp API');
+    return '/email-api/proxy-whatsapp';
+  }
+
   // Get the API URL from the environment variables
   const envUrl = import.meta.env.VITE_WHATSAPP_API_URL;
   
@@ -23,7 +32,7 @@ export function getWhatsAppApiUrl(): string {
     return envUrl;
   }
   
-  // Use direct URL approach
+  // Use direct URL approach for non-Easypanel environments
   console.log('Using direct WhatsApp API URL:', envUrl);
   return envUrl;
 }
@@ -66,6 +75,24 @@ export enum WhatsAppTemplate {
 }
 
 /**
+ * Helper function to get the correct endpoint for WhatsApp API calls
+ * @param path - The path to append to the API URL
+ * @returns The full API endpoint
+ */
+function getWhatsAppEndpoint(path: string): string {
+  const apiUrl = getWhatsAppApiUrl();
+  
+  // If using the proxy, use the base proxy URL without appending the path
+  // The path will be extracted in the server-side proxy
+  if (apiUrl === '/email-api/proxy-whatsapp') {
+    return apiUrl;
+  }
+  
+  // Otherwise use the configured WHATSAPP_API_URL with the path
+  return `${WHATSAPP_API_URL}${path}`;
+}
+
+/**
  * Send a WhatsApp text message
  * @param to - Recipient phone number
  * @param message - Message content
@@ -95,9 +122,14 @@ export async function sendWhatsAppTextMessage(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Get the API endpoint with the correct path
+    const endpoint = getWhatsAppEndpoint('/send-message');
+    
+    // Make the API request
     console.log('Sending WhatsApp text message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-message`, data);
+    console.log('Using endpoint:', endpoint);
+    
+    const response = await axios.post(endpoint, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -220,15 +252,19 @@ export async function sendWhatsAppImageMessage(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Get the API endpoint with the correct path
+    const endpoint = getWhatsAppEndpoint('/send-image-url');
+    
+    // Make the API request
     console.log('Sending WhatsApp image message to:', formattedPhone);
+    console.log('Using endpoint:', endpoint);
     console.log('Request data:', JSON.stringify({
       ...data,
       imageUrl: data.imageUrl.startsWith('data:') ? '[BASE64_DATA_URL]' : data.imageUrl
     }, null, 2));
     
     try {
-      const response = await axios.post(`${WHATSAPP_API_URL}/send-image-url`, data);
+      const response = await axios.post(endpoint, data);
       console.log('WhatsApp API response:', response.data);
       
       // Return a standardized response

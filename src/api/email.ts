@@ -332,4 +332,97 @@ router.get('/check-whatsapp-connection', async (req, res) => {
   }
 });
 
+// General purpose WhatsApp API proxy endpoint
+router.all('/proxy-whatsapp*', async (req, res) => {
+  try {
+    console.log('WhatsApp API proxy request:', req.method, req.path);
+    
+    // Extract the actual path after /proxy-whatsapp
+    // This handles both /proxy-whatsapp/path and /proxy-whatsapp endpoints
+    const whatsAppPath = req.path.replace(/^\/proxy-whatsapp($|\/)/, '/');
+    
+    // Get WhatsApp API URL from environment variables
+    const whatsAppApiUrl = process.env.WHATSAPP_API_URL || 'https://backend-whatsappapi.7za6uc.easypanel.host';
+    const fullUrl = `${whatsAppApiUrl}${whatsAppPath}`;
+    
+    console.log('Proxying request to:', fullUrl);
+    
+    // Set CORS headers for all responses
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Handle preflight request
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+    
+    // Make the request to the WhatsApp API
+    const options = {
+      method: req.method,
+      url: fullUrl,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      data: req.body,
+      timeout: 10000
+    };
+    
+    // Forward the request to the WhatsApp API
+    const response = await axios(options);
+    
+    console.log('WhatsApp API response:', {
+      status: response.status,
+      statusText: response.statusText
+    });
+    
+    // Send back the response from the WhatsApp API
+    return res.status(response.status).json(response.data);
+  } catch (error) {
+    console.error('Error in WhatsApp API proxy:', error);
+    
+    // Add CORS headers even to error responses
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    
+    // Extract error details and return a meaningful response
+    if (axios.isAxiosError(error)) {
+      // If the WhatsApp API returned an error
+      if (error.response) {
+        return res.status(error.response.status).json({
+          success: false,
+          message: `WhatsApp API error: ${error.response.status} ${error.response.statusText}`,
+          data: error.response.data
+        });
+      } else if (error.request) {
+        // If the request was made but no response was received
+        return res.status(502).json({
+          success: false,
+          message: 'No response from WhatsApp API. The server may be down or unreachable.'
+        });
+      } else {
+        // If there was an error setting up the request
+        return res.status(500).json({
+          success: false,
+          message: `Error setting up request: ${error.message}`
+        });
+      }
+    } else if (error instanceof Error) {
+      // For other types of errors
+      return res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    } else {
+      // For unknown errors
+      return res.status(500).json({
+        success: false,
+        message: 'An unknown error occurred'
+      });
+    }
+  }
+});
+
 export default router;
