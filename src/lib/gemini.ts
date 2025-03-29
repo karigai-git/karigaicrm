@@ -1,9 +1,10 @@
 /**
  * Utility for interacting with Google's Gemini API using direct API calls
  */
+import { SERVER_ENV } from './env';
 
 // The API key is loaded from environment variables
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_API_KEY = SERVER_ENV.VITE_GEMINI_API_KEY;
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 /**

@@ -1,48 +1,22 @@
 [phases.setup]
-aptPkgs = ["nodejs", "npm", "curl", "git"]
+aptPkgs = ["nodejs", "npm"]
 
 [phases.install]
-cmds = [
-  "npm install --production --no-fund --no-audit",  # Install production deps first
-  "npm install --no-fund --no-audit --no-save"      # Then dev deps
-]
+cmds = ["npm install"]
 
 [phases.build]
-cmds = [
-  "export NODE_OPTIONS=\"--max-old-space-size=512\"",  # Limit Node memory
-  "NODE_ENV=production npx vite build --minify --outDir dist",  # Build frontend
-  "npm run build:server",                           # Build server
-  "npm prune --production",                         # Clean up
-  "rm -rf node_modules/.cache"                      # Remove cache
-]
+cmds = ["npm run build"]
 
 [start]
-# Use a proper start script that handles both services and proper signal handling
-cmd = "sh -c 'node dist-server/server/index.js & SERVER_PID=$!; npx serve -s dist -l ${PORT:-8080} & SERVE_PID=$!; trap \"kill $SERVER_PID $SERVE_PID\" SIGINT SIGTERM; wait'"
+cmd = "sh -c 'npm run start:server & npx serve -s dist -l 8080'"
 
 [variables]
-# Environment configuration
 NODE_ENV = "production"
-PORT = "8080"                      # Main app port
-SERVER_PORT = "4000"               # API server port
-VITE_EMAIL_API_URL = "/email-api"  # Use relative path for email API
-VITE_WHATSAPP_API_URL = "/email-api/proxy-whatsapp"  # Use email API proxy for WhatsApp
-
-# Optimization settings
-NODE_OPTIONS = "--max-old-space-size=512"  # Limit memory usage
-NPM_CONFIG_LOGLEVEL = "error"               # Reduce npm logging
+SERVER_PORT = "4000"
 
 [nixpacks]
 start-phase = "start"
-plan-path = "./nixpacks.plan.json"  # Optional - allows saving the build plan
 
 [ports]
-http = { port = 8080, health-check = { path = "/" } }
-api = { port = 4000, health-check = { path = "/email-api/status" } }
-
-# Cache configuration for faster builds
-[cache]
-directories = [
-  "/root/.npm",
-  "node_modules/.cache"
-]
+http = 8080
+api = 4000

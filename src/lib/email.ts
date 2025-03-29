@@ -1,32 +1,8 @@
 import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
-import { api } from './api';
 
-// Get the Email API URL from environment or use default
-function getEmailApiUrl(): string {
-  const envUrl = import.meta.env.VITE_EMAIL_API_URL;
-  
-  // Default Email API URL
-  const defaultApiUrl = 'https://backend-email.7za6uc.easypanel.host/api/email';
-  
-  if (!envUrl) {
-    console.warn('VITE_EMAIL_API_URL not found in environment. Using default API URL:', defaultApiUrl);
-    return defaultApiUrl;
-  }
-  
-  // For development mode, check if we need to use proxy
-  if (window.location.hostname === 'localhost' && envUrl === '/email-api') {
-    console.log('Development environment detected with proxy path. Using proxy for local development.');
-    return envUrl;
-  }
-  
-  // Use direct URL approach
-  console.log('Using direct Email API URL:', envUrl);
-  return envUrl;
-}
-
-// Set the email API URL - use direct URL in production, proxy in development
-const EMAIL_API_URL = getEmailApiUrl();
+// Email API URL using the proxy configured in vite.config.js
+const EMAIL_API_URL = '/email-api';
 
 // Interface for Email message activity logging
 export interface EmailActivity {
@@ -69,15 +45,6 @@ export enum EmailTemplate {
 }
 
 /**
- * Validate an email address format
- * @param email - Email address to validate
- */
-export function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/**
  * Send an email message
  * @param to - Recipient email address
  * @param subject - Email subject
@@ -113,18 +80,18 @@ export async function sendEmailMessage(
       data.variables = variables;
     }
     
-    // Use our new API utility instead of direct axios calls
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending email to:', to);
-    const response = await api.post(`${EMAIL_API_URL}/send-email`, data);
-    console.log('Email API response:', response);
+    const response = await axios.post(`${EMAIL_API_URL}/send-email`, data);
+    console.log('Email API response:', response.data);
     
     // Return a standardized response
     return {
       success: true,
       message: 'Email sent',
-      messageId: response.messageId || response.id,
-      status: response.status || 'sent',
-      timestamp: response.timestamp || new Date().toISOString()
+      messageId: response.data.messageId || response.data.id,
+      status: response.data.status || 'sent',
+      timestamp: response.data.timestamp || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error sending email:', error);
@@ -186,18 +153,18 @@ export async function sendEmailWithAttachment(
       data.variables = variables;
     }
     
-    // Use our new API utility instead of direct axios calls
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending email with attachment to:', to);
-    const response = await api.post(`${EMAIL_API_URL}/send-email-with-attachment`, data);
-    console.log('Email API response:', response);
+    const response = await axios.post(`${EMAIL_API_URL}/send-email-with-attachment`, data);
+    console.log('Email API response:', response.data);
     
     // Return a standardized response
     return {
       success: true,
       message: 'Email with attachment sent',
-      messageId: response.messageId || response.id,
-      status: response.status || 'sent',
-      timestamp: response.timestamp || new Date().toISOString()
+      messageId: response.data.messageId || response.data.id,
+      status: response.data.status || 'sent',
+      timestamp: response.data.timestamp || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error sending email with attachment:', error);
@@ -574,7 +541,7 @@ export async function sendReorderReminderEmail(
  */
 export async function logEmailActivity(activity: EmailActivity): Promise<void> {
   try {
-    await api.post(`${EMAIL_API_URL}/log-activity`, activity);
+    await axios.post(`${EMAIL_API_URL}/log-activity`, activity);
     console.log('Email activity logged:', activity);
   } catch (error) {
     console.error('Error logging email activity:', error);
@@ -582,7 +549,16 @@ export async function logEmailActivity(activity: EmailActivity): Promise<void> {
 }
 
 /**
- * Check the Email API connection status
+ * Check if an email address is valid
+ * @param email - Email address to validate
+ */
+export function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Check the email service connection status
  * @returns Promise with connection status
  */
 export async function checkEmailConnection(): Promise<{
@@ -591,67 +567,18 @@ export async function checkEmailConnection(): Promise<{
   message?: string;
 }> {
   try {
-    // Simple detection of environment
-    const isProduction = window.location.hostname.includes('easypanel.host');
-    
-    // For production environments, always return a positive status
-    if (isProduction) {
-      console.log('Production environment detected, assuming Email API is connected');
-      
-      // Return a hardcoded positive status
-      return {
-        connected: true,
-        status: 'connected',
-        message: 'Email API is assumed to be connected'
-      };
-    }
-    
-    // For direct server connection checks, use our server endpoint
-    console.log('Development environment detected, checking Email API connection directly');
-    
-    // Use direct server connection in development 
-    // Instead of an API call to /status, use a direct curl check
-    const response = await axios.post('/email-api/direct-email-check', {}, {
-      timeout: 5000
-    });
-    
-    console.log('Email connection check successful:', response.data);
-    
+    const response = await axios.get(`${EMAIL_API_URL}/status`);
     return {
-      connected: true,
-      status: response.data.status || 'connected',
-      message: response.data.message || 'Email API is connected'
+      connected: response.data.connected || false,
+      status: response.data.status || 'unknown',
+      message: response.data.message || 'Connection status checked'
     };
   } catch (error) {
-    console.error('Error checking Email connection:', error);
-    
-    // Log detailed error information
-    if (axios.isAxiosError(error)) {
-      console.error('Email connection error details:', {
-        message: error.message,
-        code: error.code,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
-    }
-    
-    // Always return a positive status in production to prevent UI disruption
-    if (window.location.hostname.includes('easypanel.host')) {
-      return {
-        connected: true,
-        status: 'assumed_connected',
-        message: 'Email API is assumed to be connected'
-      };
-    }
-    
-    // Only return disconnected in development
+    console.error('Error checking email connection:', error);
     return {
       connected: false,
-      status: 'disconnected',
-      message: axios.isAxiosError(error) 
-        ? `Connection error: ${error.message}` 
-        : 'Email API is not connected. Please check console for details.'
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Failed to check email connection'
     };
   }
 }

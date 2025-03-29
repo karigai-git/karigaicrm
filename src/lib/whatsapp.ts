@@ -1,44 +1,8 @@
 import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
 
-/**
- * Gets the WhatsApp API URL from environment or direct API URL
- * @returns The URL to use for WhatsApp API calls
- */
-export function getWhatsAppApiUrl(): string {
-  // Simple detection of environment
-  const isProduction = window.location.hostname.includes('easypanel.host');
-  
-  // For production environments in Easypanel, use the email API as a proxy
-  if (isProduction) {
-    console.log('Production environment detected, using server-side proxy for WhatsApp API');
-    return '/email-api/proxy-whatsapp';
-  }
-
-  // Get the API URL from the environment variables
-  const envUrl = import.meta.env.VITE_WHATSAPP_API_URL;
-  
-  // Default WhatsApp API URL if environment variable is not set
-  const defaultApiUrl = 'https://backend-whatsappapi.7za6uc.easypanel.host';
-  
-  if (!envUrl) {
-    console.warn('VITE_WHATSAPP_API_URL not found in environment. Using default API URL:', defaultApiUrl);
-    return defaultApiUrl;
-  }
-  
-  // For development mode, check if we need to use proxy
-  if (window.location.hostname === 'localhost' && envUrl === '/whatsapp-api') {
-    console.log('Development environment detected with proxy path. Using proxy for local development.');
-    return envUrl;
-  }
-  
-  // Use direct URL approach for non-Easypanel environments
-  console.log('Using direct WhatsApp API URL:', envUrl);
-  return envUrl;
-}
-
-// Use the function to set the API URL
-const WHATSAPP_API_URL = getWhatsAppApiUrl();
+// WhatsApp API URL using the proxy configured in vite.config.js
+const WHATSAPP_API_URL = '/whatsapp-api';
 
 // Interface for WhatsApp message activity logging
 export interface WhatsAppActivity {
@@ -75,24 +39,6 @@ export enum WhatsAppTemplate {
 }
 
 /**
- * Helper function to get the correct endpoint for WhatsApp API calls
- * @param path - The path to append to the API URL
- * @returns The full API endpoint
- */
-function getWhatsAppEndpoint(path: string): string {
-  const apiUrl = getWhatsAppApiUrl();
-  
-  // If using the proxy, use the base proxy URL without appending the path
-  // The path will be extracted in the server-side proxy
-  if (apiUrl === '/email-api/proxy-whatsapp') {
-    return apiUrl;
-  }
-  
-  // Otherwise use the configured WHATSAPP_API_URL with the path
-  return `${WHATSAPP_API_URL}${path}`;
-}
-
-/**
  * Send a WhatsApp text message
  * @param to - Recipient phone number
  * @param message - Message content
@@ -122,14 +68,9 @@ export async function sendWhatsAppTextMessage(
       data.variables = variables;
     }
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-message');
-    
-    // Make the API request
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp text message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post(endpoint, data);
+    const response = await axios.post(`${WHATSAPP_API_URL}/send-message`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -252,19 +193,15 @@ export async function sendWhatsAppImageMessage(
       data.variables = variables;
     }
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-image-url');
-    
-    // Make the API request
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp image message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
     console.log('Request data:', JSON.stringify({
       ...data,
       imageUrl: data.imageUrl.startsWith('data:') ? '[BASE64_DATA_URL]' : data.imageUrl
     }, null, 2));
     
     try {
-      const response = await axios.post(endpoint, data);
+      const response = await axios.post(`${WHATSAPP_API_URL}/send-image-url`, data);
       console.log('WhatsApp API response:', response.data);
       
       // Return a standardized response
@@ -372,14 +309,9 @@ export async function sendWhatsAppVideoMessage(
       data.variables = variables;
     }
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-video-url');
-    
-    // Make the API request
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp video message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post(endpoint, data);
+    const response = await axios.post(`${WHATSAPP_API_URL}/send-video-url`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -478,14 +410,9 @@ export async function sendWhatsAppDocumentMessage(
       data.variables = variables;
     }
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-document-url');
-    
-    // Make the API request
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp document message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post(endpoint, data);
+    const response = await axios.post(`${WHATSAPP_API_URL}/send-document-url`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -545,14 +472,9 @@ export async function sendWhatsAppMessage(
       data.variables = variables;
     }
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-message');
-    
-    // Make the API request
+    // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post(endpoint, data);
+    const response = await axios.post(`${WHATSAPP_API_URL}/send-message`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -598,13 +520,7 @@ export async function sendWhatsAppImage(
   try {
     const formattedPhone = formatPhoneNumber(phoneNumber);
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-image-url');
-    
-    console.log('Sending WhatsApp image to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post<WhatsAppApiResponse>(endpoint, {
+    const response = await axios.post<WhatsAppApiResponse>(`${WHATSAPP_API_URL}/send-image-url`, {
       number: formattedPhone,
       imageUrl,
       caption,
@@ -1265,39 +1181,8 @@ export async function checkWhatsAppConnection(): Promise<{
   message?: string;
 }> {
   try {
-    // Simple detection of environment
-    const isProduction = window.location.hostname.includes('easypanel.host');
-    
-    // For production environments, always return a positive status
-    // This is the simplest approach to avoid CORS issues
-    if (isProduction) {
-      console.log('Production environment detected, assuming WhatsApp API is connected');
-      
-      // Return a hardcoded positive status
-      return {
-        connected: true,
-        status: 'connected',
-        message: 'WhatsApp API is assumed to be connected'
-      };
-    }
-    
-    // For development environments, try direct API access
-    const apiUrl = getWhatsAppApiUrl();
-    const statusEndpoint = apiUrl.endsWith('/') ? 'status' : '/status';
-    const fullUrl = `${apiUrl}${statusEndpoint}`;
-    
-    console.log('Checking WhatsApp connection directly at:', fullUrl);
-    
-    // Make direct API request for development environment
-    const response = await axios.get(fullUrl, {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      timeout: 5000
-    });
-    
-    console.log('WhatsApp connection check successful:', response.data);
+    // Make a request to the status endpoint
+    const response = await axios.get(`${WHATSAPP_API_URL}/status`);
     
     // Return the connection status
     return {
@@ -1308,105 +1193,11 @@ export async function checkWhatsAppConnection(): Promise<{
   } catch (error) {
     console.error('Error checking WhatsApp connection:', error);
     
-    // For development, log detailed error information
-    if (axios.isAxiosError(error)) {
-      console.error('WhatsApp connection error details:', {
-        message: error.message,
-        code: error.code,
-        status: error.response?.status,
-        statusText: error.response?.statusText
-      });
-    }
-    
-    // Always return a positive status in production to prevent UI disruption
-    if (window.location.hostname.includes('easypanel.host')) {
-      return {
-        connected: true,
-        status: 'assumed_connected',
-        message: 'WhatsApp API is assumed to be connected'
-      };
-    }
-    
-    // Only return disconnected in development
+    // Return disconnected status
     return {
       connected: false,
       status: 'disconnected',
-      message: 'WhatsApp API is not connected. Check console for details.'
-    };
-  }
-}
-
-/**
- * Send a WhatsApp message using server-side curl (avoids CORS issues)
- * @param to - Recipient phone number
- * @param message - Message content
- * @param type - Message type (text, image, video, document)
- * @param mediaUrl - URL for media content (if applicable)
- * @param caption - Caption for media (if applicable)
- * @param filename - Filename for documents (if applicable)
- */
-export async function sendWhatsAppDirectMessage(
-  to: string,
-  message: string,
-  type: 'text' | 'image' | 'video' | 'document' = 'text',
-  mediaUrl?: string,
-  caption?: string,
-  filename?: string
-): Promise<WhatsAppApiResponse> {
-  try {
-    // Format phone number
-    const formattedPhone = formatPhoneNumber(to);
-    
-    // Prepare the request data
-    const data: Record<string, any> = {
-      to: formattedPhone,
-      message,
-      type
-    };
-    
-    // Add media URL if provided
-    if (mediaUrl && ['image', 'video', 'document'].includes(type)) {
-      data.mediaUrl = mediaUrl;
-    }
-    
-    // Add caption if provided
-    if (caption) {
-      data.caption = caption;
-    }
-    
-    // Add filename if it's a document
-    if (type === 'document' && filename) {
-      data.filename = filename;
-    }
-    
-    console.log('Sending WhatsApp message using direct method:', data);
-    
-    // Send the request to our server-side endpoint that will use curl
-    const response = await axios.post('/email-api/direct-whatsapp-send', data);
-    
-    console.log('Direct WhatsApp send response:', response.data);
-    
-    return {
-      success: true,
-      message: 'Message sent via direct method',
-      messageId: response.data.messageId || response.data.id || 'unknown',
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('Error sending WhatsApp message via direct method:', error);
-    
-    // Extract error message
-    let errorMessage = 'Failed to send WhatsApp message via direct method';
-    if (axios.isAxiosError(error) && error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    
-    return {
-      success: false,
-      message: errorMessage
+      message: 'WhatsApp API is not connected'
     };
   }
 }
