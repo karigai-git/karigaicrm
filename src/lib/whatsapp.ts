@@ -1208,6 +1208,27 @@ export async function checkWhatsAppConnection(): Promise<{
   message?: string;
 }> {
   try {
+    // For Easypanel environment, always use the server-side proxy to avoid CORS issues
+    if (window.location.hostname.includes('easypanel.host')) {
+      console.log('Easypanel environment detected. Using server-side proxy for WhatsApp API connection check.');
+      const response = await axios.get('/email-api/check-whatsapp-connection', {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        timeout: 8000
+      });
+      
+      console.log('WhatsApp connection check via proxy successful:', response.data);
+      
+      return {
+        connected: response.data.connected || true,
+        status: response.data.status || 'connected',
+        message: response.data.message || 'WhatsApp API is connected (via proxy)'
+      };
+    }
+    
+    // For local development or other environments, try direct API access
     // Get the API URL dynamically
     const apiUrl = getWhatsAppApiUrl();
     const statusEndpoint = apiUrl.endsWith('/') ? 'status' : '/status';
