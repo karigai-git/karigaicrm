@@ -1,23 +1,31 @@
 # Use Node.js LTS as the base image
-FROM node:20-alpine
+FROM node:18-alpine
 
-# Set working directory
-WORKDIR /app
-
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Create app directory
+WORKDIR /code
 
 # Install dependencies
+COPY package.json package-lock.json ./
 RUN npm install
 
-# Copy the rest of the application code
+# Copy application code
 COPY . .
 
-# Build both the frontend and server
-RUN npm run build:all
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
 
-# Expose the ports the app runs on
-EXPOSE 4000 8080
+# Build both frontend and server
+RUN npm run build
+RUN npm run build:server
+
+# Expose ports
+EXPOSE 80
+EXPOSE 3000
+
+# Create a startup script
+COPY deploy.sh /deploy.sh
+RUN chmod +x /deploy.sh
 
 # Start the server
-CMD ["npm", "run", "start:server"]
+CMD ["/deploy.sh"]
