@@ -1,22 +1,45 @@
 [phases.setup]
-aptPkgs = ["nodejs", "npm"]
+aptPkgs = ["nodejs", "npm", "curl", "git"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = [
+  "npm ci --omit=dev --no-audit",   # Use ci for reproducible builds and skip dev dependencies
+  "npm prune --production"          # Remove any leftover dev dependencies
+]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+  "npm run build",                  # Build the frontend
+  "npm run build:server"            # Build the server
+]
 
 [start]
-cmd = "sh -c 'npm run start:server & npx serve -s dist -l 8080'"
+# Use a proper start script that handles both services and proper signal handling
+cmd = "sh -c 'node dist-server/server/index.js & SERVER_PID=$!; npx serve -s dist -l ${PORT:-8080} & SERVE_PID=$!; trap \"kill $SERVER_PID $SERVE_PID\" SIGINT SIGTERM; wait'"
 
 [variables]
+# Environment configuration
 NODE_ENV = "production"
-SERVER_PORT = "4000"
+PORT = "8080"                      # Main app port
+SERVER_PORT = "4000"               # API server port
+VITE_EMAIL_API_URL = "/email-api"  # Use relative path for email API
+VITE_WHATSAPP_API_URL = "/email-api/proxy-whatsapp"  # Use email API proxy for WhatsApp
+
+# Optimization settings
+NODE_OPTIONS = "--max-old-space-size=2048"  # Limit memory usage
+NPM_CONFIG_LOGLEVEL = "error"               # Reduce npm logging
 
 [nixpacks]
 start-phase = "start"
+plan-path = "./nixpacks.plan.json"  # Optional - allows saving the build plan
 
 [ports]
-http = 8080
-api = 4000
+http = { port = 8080, health-check = { path = "/" } }
+api = { port = 4000, health-check = { path = "/email-api/status" } }
+
+# Cache configuration for faster builds
+[cache]
+directories = [
+  "/root/.npm",
+  "node_modules/.cache"
+]
