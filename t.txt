@@ -1,0 +1,5 @@
+[33mcommit 7f3d960219f4b202c8f8204a7efae881b902cbe7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mkonipai-v1[m[33m, [m[1;31mkonipai-v1/konipai-v1[m[33m)[m
+Author: rizo8107 <your.email@example.com>
+Date:   Sat Mar 29 23:27:22 2025 +0530
+
+    Clean up project: removed unused files and fixed email server configuration
