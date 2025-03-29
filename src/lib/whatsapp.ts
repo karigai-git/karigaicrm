@@ -372,9 +372,14 @@ export async function sendWhatsAppVideoMessage(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Get the API endpoint with the correct path
+    const endpoint = getWhatsAppEndpoint('/send-video-url');
+    
+    // Make the API request
     console.log('Sending WhatsApp video message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-video-url`, data);
+    console.log('Using endpoint:', endpoint);
+    
+    const response = await axios.post(endpoint, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -473,9 +478,14 @@ export async function sendWhatsAppDocumentMessage(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Get the API endpoint with the correct path
+    const endpoint = getWhatsAppEndpoint('/send-document-url');
+    
+    // Make the API request
     console.log('Sending WhatsApp document message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-document-url`, data);
+    console.log('Using endpoint:', endpoint);
+    
+    const response = await axios.post(endpoint, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -535,9 +545,14 @@ export async function sendWhatsAppMessage(
       data.variables = variables;
     }
     
-    // Make the API request through the proxy configured in vite.config.js
+    // Get the API endpoint with the correct path
+    const endpoint = getWhatsAppEndpoint('/send-message');
+    
+    // Make the API request
     console.log('Sending WhatsApp message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-message`, data);
+    console.log('Using endpoint:', endpoint);
+    
+    const response = await axios.post(endpoint, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -583,7 +598,13 @@ export async function sendWhatsAppImage(
   try {
     const formattedPhone = formatPhoneNumber(phoneNumber);
     
-    const response = await axios.post<WhatsAppApiResponse>(`${WHATSAPP_API_URL}/send-image-url`, {
+    // Get the API endpoint with the correct path
+    const endpoint = getWhatsAppEndpoint('/send-image-url');
+    
+    console.log('Sending WhatsApp image to:', formattedPhone);
+    console.log('Using endpoint:', endpoint);
+    
+    const response = await axios.post<WhatsAppApiResponse>(endpoint, {
       number: formattedPhone,
       imageUrl,
       caption,
