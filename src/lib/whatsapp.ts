@@ -1,8 +1,40 @@
 import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
+import { 
+  checkWhatsAppStatus as checkWhatsAppStatusDirect, 
+  sendWhatsAppMessage as sendWhatsAppMessageDirect, 
+  sendWhatsAppTemplate as sendWhatsAppTemplateDirect 
+} from './whatsapp-client';
 
-// WhatsApp API URL using the proxy configured in vite.config.js
-const WHATSAPP_API_URL = '/whatsapp-api';
+/**
+ * Gets the WhatsApp API URL from environment or direct API URL
+ * @returns The URL to use for WhatsApp API calls
+ */
+export function getWhatsAppApiUrl(): string {
+  // Simple detection of environment
+  const isProduction = typeof window !== 'undefined' && window.location.hostname.includes('easypanel.host');
+  
+  // For production environments in Easypanel, use direct API URL
+  if (isProduction) {
+    console.log('Production environment detected, using direct WhatsApp API');
+    return 'https://backend-whatsappapi.7za6uc.easypanel.host';
+  }
+
+  // Get the API URL from the environment variables
+  const envUrl = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_WHATSAPP_API_URL;
+  
+  // Default WhatsApp API URL if environment variable is not set
+  const defaultApiUrl = 'https://backend-whatsappapi.7za6uc.easypanel.host';
+  
+  if (!envUrl) {
+    console.warn('VITE_WHATSAPP_API_URL not found in environment. Using default API URL:', defaultApiUrl);
+    return defaultApiUrl;
+  }
+  
+  // Use direct URL approach
+  console.log('Using WhatsApp API URL:', envUrl);
+  return envUrl as string;
+}
 
 // Interface for WhatsApp message activity logging
 export interface WhatsAppActivity {
@@ -39,7 +71,12 @@ export enum WhatsAppTemplate {
 }
 
 /**
- * Send a WhatsApp text message
+ * Check WhatsApp API status - using direct client
+ */
+export const checkStatus = checkWhatsAppStatusDirect;
+
+/**
+ * Send a WhatsApp text message - using direct client
  * @param to - Recipient phone number
  * @param message - Message content
  * @param variables - Optional variables for template messages
@@ -49,55 +86,47 @@ export async function sendWhatsAppTextMessage(
   message: string,
   variables?: Record<string, string>
 ): Promise<WhatsAppApiResponse> {
-  try {
-    // Format phone number (ensure it has country code and no special chars)
-    const formattedPhone = formatPhoneNumber(to);
-    
-    // Prepare the request data
-    const data: {
-      number: string;
-      message: string;
-      variables?: Record<string, string>;
-    } = {
-      number: formattedPhone,
-      message
-    };
-    
-    // Add variables if provided
-    if (variables) {
-      data.variables = variables;
-    }
-    
-    // Make the API request through the proxy configured in vite.config.js
-    console.log('Sending WhatsApp text message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-message`, data);
-    console.log('WhatsApp API response:', response.data);
-    
-    // Return a standardized response
-    return {
-      success: true,
-      message: 'Message sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
-    
-    // Extract error message from the response if available
-    let errorMessage = 'Failed to send WhatsApp message';
-    if (axios.isAxiosError(error) && error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    
-    // Return a standardized error response
-    return {
-      success: false,
-      message: errorMessage
-    };
+  return sendWhatsAppMessageDirect(to, message, variables);
+}
+
+/**
+ * Format a phone number to ensure it has country code
+ * @param phone - Phone number to format
+ * @returns Formatted phone number
+ */
+export function formatPhoneNumber(phone: string): string {
+  // Remove any non-digit characters
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // Ensure it starts with the country code (91 for India)
+  if (!cleaned.startsWith('91')) {
+    cleaned = '91' + cleaned;
   }
+  
+  return cleaned;
+}
+
+/**
+ * Convert local image to base64 data URL
+ * @param url - Local image URL
+ * @returns Promise with the base64 data URL
+ */
+export async function convertLocalImageToBase64(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.height = img.height;
+      canvas.width = img.width;
+      ctx?.drawImage(img, 0, 0);
+      const dataURL = canvas.toDataURL('image/png');
+      resolve(dataURL);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
 }
 
 /**
@@ -201,7 +230,7 @@ export async function sendWhatsAppImageMessage(
     }, null, 2));
     
     try {
-      const response = await axios.post(`${WHATSAPP_API_URL}/send-image-url`, data);
+      const response = await axios.post(`${getWhatsAppApiUrl()}/send-image-url`, data);
       console.log('WhatsApp API response:', response.data);
       
       // Return a standardized response
@@ -311,7 +340,7 @@ export async function sendWhatsAppVideoMessage(
     
     // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp video message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-video-url`, data);
+    const response = await axios.post(`${getWhatsAppApiUrl()}/send-video-url`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -412,7 +441,7 @@ export async function sendWhatsAppDocumentMessage(
     
     // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp document message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-document-url`, data);
+    const response = await axios.post(`${getWhatsAppApiUrl()}/send-document-url`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -474,7 +503,7 @@ export async function sendWhatsAppMessage(
     
     // Make the API request through the proxy configured in vite.config.js
     console.log('Sending WhatsApp message to:', formattedPhone);
-    const response = await axios.post(`${WHATSAPP_API_URL}/send-message`, data);
+    const response = await axios.post(`${getWhatsAppApiUrl()}/send-message`, data);
     console.log('WhatsApp API response:', response.data);
     
     // Return a standardized response
@@ -520,7 +549,7 @@ export async function sendWhatsAppImage(
   try {
     const formattedPhone = formatPhoneNumber(phoneNumber);
     
-    const response = await axios.post<WhatsAppApiResponse>(`${WHATSAPP_API_URL}/send-image-url`, {
+    const response = await axios.post<WhatsAppApiResponse>(`${getWhatsAppApiUrl()}/send-image-url`, {
       number: formattedPhone,
       imageUrl,
       caption,
@@ -1098,60 +1127,6 @@ export async function uploadFileToPocketBase(file: File): Promise<{ url: string 
 }
 
 /**
- * Convert a local image URL to a base64 data URL
- * @param imageUrl - The local image URL to convert
- * @returns Promise with the base64 data URL
- */
-async function convertLocalImageToBase64(imageUrl: string): Promise<string> {
-  try {
-    // Only process URLs that are local
-    if (imageUrl.includes('localhost') || imageUrl.startsWith('/')) {
-      console.log('Converting local image to base64:', imageUrl);
-      
-      // Fetch the image
-      const response = await fetch(imageUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-      }
-      
-      // Convert to blob
-      const blob = await response.blob();
-      
-      // Convert blob to base64
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    }
-    
-    // If not a local URL, return the original URL
-    return imageUrl;
-  } catch (error) {
-    console.error('Error converting local image to base64:', error);
-    throw error;
-  }
-}
-
-/**
- * Format phone number to ensure it has country code and no special characters
- * @param phoneNumber - Phone number to format
- */
-function formatPhoneNumber(phoneNumber: string): string {
-  // Remove any non-digit characters
-  let cleaned = phoneNumber.replace(/\D/g, '');
-  
-  // Check if it already has country code (assuming 91 for India)
-  if (!cleaned.startsWith('91')) {
-    // Add country code if missing
-    cleaned = '91' + cleaned;
-  }
-  
-  return cleaned;
-}
-
-/**
  * Get estimated delivery date (7-10 days from now)
  */
 function getEstimatedDeliveryDate(): string {
@@ -1182,7 +1157,7 @@ export async function checkWhatsAppConnection(): Promise<{
 }> {
   try {
     // Make a request to the status endpoint
-    const response = await axios.get(`${WHATSAPP_API_URL}/status`);
+    const response = await axios.get(`${getWhatsAppApiUrl()}/status`);
     
     // Return the connection status
     return {
