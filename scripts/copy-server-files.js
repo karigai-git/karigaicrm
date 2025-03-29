@@ -1,22 +1,3 @@
-#!/bin/bash
-# Deployment script for Konipai CRM
-
-# Navigate to project directory
-cd /code
-
-# Install dependencies
-npm install
-
-# Build the frontend
-npm run build
-
-# Ensure scripts directory exists for the build process
-mkdir -p scripts
-
-# Create copy-server-files.js script if it doesn't exist
-if [ ! -f scripts/copy-server-files.js ]; then
-  echo "Creating copy-server-files.js script..."
-  cat > scripts/copy-server-files.js << 'EOF'
 /**
  * Script to copy server files to the dist-server directory
  * This ensures all necessary files are included in the build
@@ -77,25 +58,4 @@ copyDir(srcServerDir, destServerDir);
 console.log('Copying lib files...');
 copyDir(srcLibDir, destLibDir);
 
-console.log('All files copied successfully!');
-EOF
-fi
-
-# Build the server-side code
-npm run build:server
-
-# Copy environment variables if needed
-if [ -f .env.production ]; then
-  cp .env.production .env
-fi
-
-# Ensure the build directory has proper permissions
-chmod -R 755 dist/
-chmod -R 755 dist-server/
-
-# Create empty directories if they don't exist (as fallbacks)
-mkdir -p dist-server/api
-mkdir -p dist-server/lib
-
-# Start the server
-node dist-server/server/index.js 
+console.log('All files copied successfully!'); 

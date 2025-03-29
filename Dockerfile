@@ -8,6 +8,10 @@ WORKDIR /code
 COPY package.json package-lock.json ./
 RUN npm install
 
+# Create scripts directory and copy build scripts
+RUN mkdir -p scripts
+COPY scripts/ ./scripts/
+
 # Copy application code
 COPY . .
 
