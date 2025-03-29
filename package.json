@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npx vite build",
     "build:dev": "npx vite build --mode development",
-    "build:server": "npx tsx --build tsconfig.server.json && cp -r src/server dist-server/ && cp -r src/api dist-server/ && cp -r src/lib dist-server/",
+    "build:server": "npx tsc -p tsconfig.server.json && cp -r src/server dist-server/ && cp -r src/api dist-server/ && cp -r src/lib dist-server/",
     "lint": "eslint .",
     "preview": "vite preview",
     "start:email-server": "tsx src/server/index.ts",
