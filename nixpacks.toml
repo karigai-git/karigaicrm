@@ -3,13 +3,17 @@ aptPkgs = ["nodejs", "npm", "curl", "git"]
 
 [phases.install]
 cmds = [
-  "npm install"  # Use full install to include dev dependencies needed for build
+  "npm install --production --no-fund --no-audit",  # Install production deps first
+  "npm install --no-fund --no-audit --no-save"      # Then dev deps
 ]
 
 [phases.build]
 cmds = [
-  "npm run build",                  # Build the frontend
-  "npm run build:server"            # Build the server
+  "export NODE_OPTIONS=\"--max-old-space-size=512\"",  # Limit Node memory
+  "NODE_ENV=production npx vite build --minify --outDir dist",  # Build frontend
+  "npm run build:server",                           # Build server
+  "npm prune --production",                         # Clean up
+  "rm -rf node_modules/.cache"                      # Remove cache
 ]
 
 [start]
@@ -25,7 +29,7 @@ VITE_EMAIL_API_URL = "/email-api"  # Use relative path for email API
 VITE_WHATSAPP_API_URL = "/email-api/proxy-whatsapp"  # Use email API proxy for WhatsApp
 
 # Optimization settings
-NODE_OPTIONS = "--max-old-space-size=2048"  # Limit memory usage
+NODE_OPTIONS = "--max-old-space-size=512"  # Limit memory usage
 NPM_CONFIG_LOGLEVEL = "error"               # Reduce npm logging
 
 [nixpacks]
