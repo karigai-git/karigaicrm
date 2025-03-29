@@ -4,7 +4,7 @@
  */
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { SERVER_ENV } from './env.js';
+import { SERVER_ENV } from './env';
 
 // Promisify exec to use async/await
 const execAsync = promisify(exec);
