@@ -16,11 +16,11 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run start:email-server\"",
     "build:all": "npm run build && npm run build:server",
     "dev:frontend": "vite",
-    "dev:backend": "tsx src/server/server.ts",
+    "dev:backend": "tsx src/server/index.ts",
     "build:frontend": "vite build",
     "build:backend": "tsc --project tsconfig.server.json && node scripts/copy-server-files.js",
     "start:frontend": "serve -s dist",
-    "start:backend": "node dist-server/server/server.js"
+    "start:backend": "node dist-server/server/index.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",

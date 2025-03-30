@@ -34,5 +34,5 @@ ENV PORT=3000
 # Expose port
 EXPOSE 3000
 
-# Start server
-CMD ["node", "dist-server/server/server.js"] 
+# Start server - Use index.js instead of server.js
+CMD ["node", "dist-server/server/index.js"] 
