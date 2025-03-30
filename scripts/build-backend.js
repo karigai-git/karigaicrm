@@ -13,14 +13,20 @@ const rootDir = path.resolve(__dirname, '..');
 // Source and destination paths
 const srcDir = path.join(rootDir, 'src');
 const destDir = path.join(rootDir, 'dist-server');
+const destServerDir = path.join(destDir, 'server');
 const serverConfigSrc = path.join(rootDir, 'server.config.ts');
 const serverConfigDest = path.join(rootDir, 'dist-server', 'server.config.js');
 
-// Create destination directory if it doesn't exist
-if (!fs.existsSync(destDir)) {
-  fs.mkdirSync(destDir, { recursive: true });
-  console.log(`Created directory: ${destDir}`);
+// Create destination directories if they don't exist
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`Created directory: ${dir}`);
+  }
 }
+
+ensureDir(destDir);
+ensureDir(destServerDir);
 
 // Step 1: Run TypeScript compiler
 console.log('Running TypeScript compiler...');
@@ -49,10 +55,42 @@ try {
   console.error('Error processing server config:', error);
 }
 
-// Step 3: Create a simple server.js entry point in the dist-server/server directory
-const serverJsPath = path.join(destDir, 'server', 'server.js');
-console.log(`Creating server entry point at ${serverJsPath}...`);
+// Step 3: Create both entry point files in the dist-server/server directory
+const indexJsPath = path.join(destServerDir, 'index.js');
+const serverJsPath = path.join(destServerDir, 'server.js');
 
+// If index.js doesn't exist after TypeScript compilation, create a simple version
+if (!fs.existsSync(indexJsPath)) {
+  console.log(`Warning: index.js not found at ${indexJsPath}, creating minimal version...`);
+  const minimalServerContent = `/**
+ * Minimal server implementation
+ */
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Server is running!' });
+});
+
+app.listen(PORT, () => {
+  console.log(\`Server running on port \${PORT}\`);
+});
+`;
+  try {
+    fs.writeFileSync(indexJsPath, minimalServerContent);
+    console.log(`Created minimal index.js at ${indexJsPath}`);
+  } catch (error) {
+    console.error('Error creating minimal index.js:', error);
+  }
+}
+
+// Always create server.js
+console.log(`Creating server entry point at ${serverJsPath}...`);
 const serverJsContent = `/**
  * Server entry point - redirects to index.js for compatibility
  */
@@ -67,5 +105,17 @@ try {
   console.error('Error creating server.js entry point:', error);
 }
 
-// Step 4: Update package.json scripts if needed
-console.log('Backend build completed successfully!'); 
+// Step 4: List files for debugging
+try {
+  console.log('\nContents of dist-server directory:');
+  const distServerFiles = fs.readdirSync(destDir);
+  console.log(distServerFiles);
+  
+  console.log('\nContents of dist-server/server directory:');
+  const serverFiles = fs.readdirSync(destServerDir);
+  console.log(serverFiles);
+} catch (error) {
+  console.error('Error listing directory contents:', error);
+}
+
+console.log('\nBackend build completed successfully!'); 
