@@ -18,9 +18,9 @@
     "dev:frontend": "vite",
     "dev:backend": "tsx src/server/index.ts",
     "build:frontend": "vite build",
-    "build:backend": "tsc --project tsconfig.server.json && node scripts/copy-server-files.js",
+    "build:backend": "node scripts/build-backend.js",
     "start:frontend": "serve -s dist",
-    "start:backend": "node dist-server/server/index.js"
+    "start:backend": "node dist-server/server/server.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",

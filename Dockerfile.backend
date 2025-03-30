@@ -27,6 +27,9 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist-server ./dist-server
 COPY --from=builder /app/server.config.ts ./
 
+# Ensure server.js exists as an entrypoint
+RUN echo 'console.log("Starting server from Docker entrypoint..."); require("./dist-server/server/index.js");' > ./server.js
+
 # Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -34,5 +37,5 @@ ENV PORT=3000
 # Expose port
 EXPOSE 3000
 
-# Start server - Use index.js instead of server.js
-CMD ["node", "dist-server/server/index.js"] 
+# Start server using the new server.js entrypoint
+CMD ["node", "server.js"] 
