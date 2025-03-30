@@ -1,9 +1,22 @@
 import dotenv from 'dotenv';
-// Load environment variables from .env file
-dotenv.config();
+// In browser environment, we don't need to load .env file as Vite handles it
+// Only run dotenv in Node.js environment
+if (typeof process !== 'undefined' && process.env) {
+    dotenv.config();
+}
 // Define a function to get environment variables with a fallback
 export function getEnv(key, defaultValue = '') {
-    return process.env[key] || defaultValue;
+    // Check if we're in browser or Node environment
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+        // Browser environment (Vite)
+        return import.meta.env[key] || defaultValue;
+    }
+    else if (typeof process !== 'undefined' && process.env) {
+        // Node.js environment
+        return process.env[key] || defaultValue;
+    }
+    // Fallback if neither is available
+    return defaultValue;
 }
 // Server-side environment variables
 export const SERVER_ENV = {

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - VITE_API_URL=http://backend:3000/api
+      - VITE_EMAIL_API_URL=http://backend:3000/email-api
+      - VITE_POCKETBASE_URL=https://backend-pocketbase.7za6uc.easypanel.host/
+    depends_on:
+      - backend
+    networks:
+      - konipai-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - SERVER_PORT=3000
+      - NODE_ENV=production
+      - EMAIL_HOST=smtp.hostinger.com
+      - EMAIL_PORT=587
+      - EMAIL_USER=support@konipai.in
+      - EMAIL_PASSWORD=Bharu@2399
+      - EMAIL_FROM=support@konipai.in
+      - POCKETBASE_ADMIN_EMAIL=nnirmal7107@gmail.com
+      - POCKETBASE_ADMIN_PASSWORD=Kamala@7107
+      - VITE_POCKETBASE_URL=https://backend-pocketbase.7za6uc.easypanel.host/
+    networks:
+      - konipai-network
+
+networks:
+  konipai-network:
+    driver: bridge 
