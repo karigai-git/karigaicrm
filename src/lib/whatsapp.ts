@@ -2,43 +2,24 @@ import axios, { AxiosResponse } from 'axios';
 import { Order, OrderItem, Product, User } from '@/types/schema';
 
 /**
- * Gets the WhatsApp API URL from environment or direct API URL
- * @returns The URL to use for WhatsApp API calls
+ * Gets the Evolution API URL from environment or direct API URL
+ * @returns The URL to use for Evolution API calls
  */
 export function getWhatsAppApiUrl(): string {
-  // Simple detection of environment
-  const isProduction = window.location.hostname.includes('easypanel.host');
-  
-  // For production environments in Easypanel, use the email API as a proxy
-  if (isProduction) {
-    console.log('Production environment detected, using server-side proxy for WhatsApp API');
-    return '/email-api/proxy-whatsapp';
-  }
-
-  // Get the API URL from the environment variables
-  const envUrl = import.meta.env.VITE_WHATSAPP_API_URL;
-  
-  // Default WhatsApp API URL if environment variable is not set
-  const defaultApiUrl = 'https://backend-whatsappapi.7za6uc.easypanel.host';
-  
-  if (!envUrl) {
-    console.warn('VITE_WHATSAPP_API_URL not found in environment. Using default API URL:', defaultApiUrl);
-    return defaultApiUrl;
-  }
-  
-  // For development mode, check if we need to use proxy
-  if (window.location.hostname === 'localhost' && envUrl === '/whatsapp-api') {
-    console.log('Development environment detected with proxy path. Using proxy for local development.');
-    return envUrl;
-  }
-  
-  // Use direct URL approach for non-Easypanel environments
-  console.log('Using direct WhatsApp API URL:', envUrl);
-  return envUrl;
+  // Always use direct URL for Evolution API as requested
+  const directUrl = 'https://crm-evolution-api.7za6uc.easypanel.host';
+  console.log('Using direct Evolution API URL:', directUrl);
+  return directUrl;
 }
 
 // Use the function to set the API URL
-const WHATSAPP_API_URL = getWhatsAppApiUrl();
+const EVOLUTION_API_URL = getWhatsAppApiUrl();
+
+// Default instance name for Evolution API
+const DEFAULT_INSTANCE = 'Konipai';
+
+// API key for Evolution API authentication
+const EVOLUTION_API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || 'your-api-key-here';
 
 // Interface for WhatsApp message activity logging
 export interface WhatsAppActivity {
@@ -75,25 +56,30 @@ export enum WhatsAppTemplate {
 }
 
 /**
- * Helper function to get the correct endpoint for WhatsApp API calls
+ * Helper function to get the correct endpoint for Evolution API calls
  * @param path - The path to append to the API URL
+ * @param instance - The WhatsApp instance name (default: 'konipai')
  * @returns The full API endpoint
  */
-function getWhatsAppEndpoint(path: string): string {
+function getEvolutionEndpoint(path: string, instance: string = DEFAULT_INSTANCE): string {
   const apiUrl = getWhatsAppApiUrl();
   
-  // If using the proxy, use the base proxy URL without appending the path
-  // The path will be extracted in the server-side proxy
-  if (apiUrl === '/email-api/proxy-whatsapp') {
-    return apiUrl;
+  // For Evolution API, many endpoints require the instance name in the path
+  if (path.includes('{instance}')) {
+    path = path.replace('{instance}', instance);
   }
   
-  // Otherwise use the configured WHATSAPP_API_URL with the path
-  return `${WHATSAPP_API_URL}${path}`;
+  // Ensure path starts with a slash
+  if (!path.startsWith('/')) {
+    path = '/' + path;
+  }
+  
+  // Return the full endpoint URL
+  return `${apiUrl}${path}`;
 }
 
 /**
- * Send a WhatsApp text message
+ * Send a WhatsApp text message using Evolution API
  * @param to - Recipient phone number
  * @param message - Message content
  * @param variables - Optional variables for template messages
@@ -107,38 +93,51 @@ export async function sendWhatsAppTextMessage(
     // Format phone number (ensure it has country code and no special chars)
     const formattedPhone = formatPhoneNumber(to);
     
-    // Prepare the request data
-    const data: {
-      number: string;
-      message: string;
-      variables?: Record<string, string>;
-    } = {
-      number: formattedPhone,
-      message
-    };
-    
-    // Add variables if provided
+    // Replace variables in the message if provided
+    let processedMessage = message;
     if (variables) {
-      data.variables = variables;
+      Object.entries(variables).forEach(([key, value]) => {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        processedMessage = processedMessage.replace(regex, value);
+      });
     }
     
+    // Prepare the request data for Evolution API following the working curl structure
+    const data = {
+      number: formattedPhone,
+      text: processedMessage,
+      options: {
+        delay: 1200,
+        presence: "composing",
+        linkPreview: true
+      }
+    };
+    
+    console.log('Request data:', JSON.stringify(data));
+    
     // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-message');
+    const endpoint = getEvolutionEndpoint('/message/sendText/{instance}');
     
-    // Make the API request
+    // Make the API request with the required headers
     console.log('Sending WhatsApp text message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
+    console.log('Using Evolution API endpoint:', endpoint);
     
-    const response = await axios.post(endpoint, data);
-    console.log('WhatsApp API response:', response.data);
+    const response = await axios.post(endpoint, data, {
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': EVOLUTION_API_KEY
+      }
+    });
+    
+    console.log('Evolution API response:', response.data);
     
     // Return a standardized response
     return {
       success: true,
       message: 'Message sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
+      messageId: response.data.key?.id || 'unknown',
+      status: response.data.status || 'PENDING',
+      timestamp: response.data.messageTimestamp || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
@@ -147,6 +146,8 @@ export async function sendWhatsAppTextMessage(
     let errorMessage = 'Failed to send WhatsApp message';
     if (axios.isAxiosError(error) && error.response?.data?.message) {
       errorMessage = error.response.data.message;
+    } else if (axios.isAxiosError(error) && error.response?.data?.error) {
+      errorMessage = error.response.data.error;
     } else if (error instanceof Error) {
       errorMessage = error.message;
     }
@@ -160,7 +161,7 @@ export async function sendWhatsAppTextMessage(
 }
 
 /**
- * Send a WhatsApp image message
+ * Send a WhatsApp image message using Evolution API
  * @param to - Recipient phone number
  * @param imageUrl - URL of the image to send
  * @param caption - Optional caption for the image
@@ -194,7 +195,7 @@ export async function sendWhatsAppImageMessage(
       } catch (conversionError) {
         console.error('Failed to convert local image to base64:', conversionError);
         // Continue with the original URL, but log a warning
-        console.warn('Using original URL, but WhatsApp API may not be able to access it');
+        console.warn('Using original URL, but Evolution API may not be able to access it');
       }
     } 
     // If it's a PocketBase URL, ensure it's properly formatted
@@ -231,90 +232,96 @@ export async function sendWhatsAppImageMessage(
     console.log('Original image URL:', imageUrl);
     console.log('Validated image URL type:', validatedImageUrl.startsWith('data:') ? 'data:URL (base64)' : validatedImageUrl);
     
-    // Prepare the request data with proper typing
-    const data: {
-      number: string;
-      imageUrl: string;
-      caption?: string;
-      variables?: Record<string, string>;
-    } = {
+    // Replace variables in the caption if provided
+    let processedCaption = caption;
+    if (caption && variables) {
+      Object.entries(variables).forEach(([key, value]) => {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        processedCaption = processedCaption?.replace(regex, value);
+      });
+    }
+    
+    // Prepare the request data for Evolution API following the official structure
+    const data = {
       number: formattedPhone,
-      imageUrl: validatedImageUrl
+      options: {
+        delay: 1200,
+        presence: "composing"
+      },
+      mediaMessage: {
+        image: {
+          url: validatedImageUrl
+        },
+        caption: processedCaption || undefined
+      }
     };
     
-    // Add caption if provided
-    if (caption) {
-      data.caption = caption;
-    }
-    
-    // Add variables if provided
-    if (variables) {
-      data.variables = variables;
-    }
-    
     // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-image-url');
+    const endpoint = getEvolutionEndpoint('/api/message/sendMedia/{instance}');
     
     // Make the API request
     console.log('Sending WhatsApp image message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
+    console.log('Using Evolution API endpoint:', endpoint);
     console.log('Request data:', JSON.stringify({
       ...data,
-      imageUrl: data.imageUrl.startsWith('data:') ? '[BASE64_DATA_URL]' : data.imageUrl
+      mediaMessage: {
+        ...data.mediaMessage,
+        image: {
+          url: data.mediaMessage.image.url.startsWith('data:') ? '[BASE64_DATA_URL]' : data.mediaMessage.image.url
+        }
+      }
     }, null, 2));
     
     try {
-      const response = await axios.post(endpoint, data);
-      console.log('WhatsApp API response:', response.data);
+      const response = await axios.post(endpoint, data, {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY
+        }
+      });
+      
+      console.log('Evolution API response:', response.data);
       
       // Return a standardized response
       return {
-        success: true,
-        message: 'Image message sent',
-        messageId: response.data.messageId || response.data.id,
-        status: response.data.status || 'sent',
-        timestamp: response.data.timestamp || new Date().toISOString()
+        success: response.data?.status === 'success',
+        message: response.data?.status === 'success' ? 'Image sent successfully' : response.data?.error || 'Failed to send image',
+        messageId: response.data?.key?.id
       };
     } catch (apiError) {
-      console.error('WhatsApp API error response:', apiError.response?.data || apiError.message);
-      throw apiError;
+      console.error('Evolution API error response:', apiError.response?.data || apiError.message);
+      
+      // Extract error message from the response if available
+      let errorMessage = 'Failed to send WhatsApp image message';
+      if (axios.isAxiosError(apiError)) {
+        console.error('Axios error details:', {
+          status: apiError.response?.status,
+          statusText: apiError.response?.statusText,
+          data: apiError.response?.data,
+          headers: apiError.response?.headers
+        });
+        
+        if (apiError.response?.data?.message) {
+          errorMessage = apiError.response.data.message;
+        } else if (apiError.response?.data?.error) {
+          errorMessage = apiError.response.data.error;
+        } else if (apiError.response?.status === 500) {
+          errorMessage = 'Evolution API server error. The image URL may not be accessible to the API.';
+        }
+      }
+      
+      throw new Error(errorMessage);
     }
   } catch (error) {
     console.error('Error sending WhatsApp image message:', error);
-    
-    // Extract error message from the response if available
-    let errorMessage = 'Failed to send WhatsApp image message';
-    if (axios.isAxiosError(error)) {
-      console.error('Axios error details:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data,
-        headers: error.response?.headers
-      });
-      
-      if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.response?.status === 500) {
-        errorMessage = 'WhatsApp API server error. The image URL may not be accessible to the API.';
-      }
-    } else if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    
-    // Return a standardized error response
-    return {
-      success: false,
-      message: errorMessage
-    };
+    return { success: false, message: `Error sending WhatsApp image message: ${error.message}` };
   }
 }
 
 /**
- * Send a WhatsApp video message
+ * Send a WhatsApp video message using Evolution API
  * @param to - Recipient phone number
- * @param videoUrl - URL of the video to send
+ * @param mediaUrl - URL of the video to send
  * @param caption - Optional caption for the video
  * @param variables - Optional variables for template messages
  */
@@ -351,44 +358,50 @@ export async function sendWhatsAppVideoMessage(
     console.log('Original video URL:', videoUrl);
     console.log('Validated video URL:', validatedVideoUrl);
     
-    // Prepare the request data with proper typing
-    const data: {
-      number: string;
-      videoUrl: string;
-      caption?: string;
-      variables?: Record<string, string>;
-    } = {
-      number: formattedPhone,
-      videoUrl: validatedVideoUrl
-    };
-    
-    // Add caption if provided
-    if (caption) {
-      data.caption = caption;
+    // Replace variables in the caption if provided
+    let processedCaption = caption;
+    if (caption && variables) {
+      Object.entries(variables).forEach(([key, value]) => {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        processedCaption = processedCaption?.replace(regex, value);
+      });
     }
     
-    // Add variables if provided
-    if (variables) {
-      data.variables = variables;
-    }
+    // Get the API endpoint
+    const apiEndpoint = getEvolutionEndpoint('/message/sendMedia/{instance}');
     
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-video-url');
+    const response = await axios.post(
+      apiEndpoint,
+      {
+        number: formattedPhone,
+        options: {
+          delay: 1200,
+          presence: 'composing'
+        },
+        media: {
+          url: validatedVideoUrl,
+          type: "video"
+        },
+        caption: processedCaption || undefined
+      },
+      {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY
+        }
+      }
+    );
     
-    // Make the API request
-    console.log('Sending WhatsApp video message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post(endpoint, data);
-    console.log('WhatsApp API response:', response.data);
+    console.log('Evolution API response for video message:', response.data);
     
     // Return a standardized response
     return {
       success: true,
       message: 'Video message sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
+      messageId: response.data.key?.id || 'unknown',
+      status: response.data.status || 'PENDING',
+      timestamp: response.data.messageTimestamp || new Date().toISOString()
     };
   } catch (error) {
     console.error('Error sending WhatsApp video message:', error);
@@ -397,6 +410,8 @@ export async function sendWhatsAppVideoMessage(
     let errorMessage = 'Failed to send WhatsApp video message';
     if (axios.isAxiosError(error) && error.response?.data?.message) {
       errorMessage = error.response.data.message;
+    } else if (axios.isAxiosError(error) && error.response?.data?.error) {
+      errorMessage = error.response.data.error;
     } else if (error instanceof Error) {
       errorMessage = error.message;
     }
@@ -410,7 +425,22 @@ export async function sendWhatsAppVideoMessage(
 }
 
 /**
- * Send a WhatsApp document message
+ * Send a WhatsApp text message (wrapper for backward compatibility)
+ * @param to - Recipient phone number
+ * @param message - Message content
+ * @param variables - Optional variables for template messages
+ */
+export async function sendWhatsAppMessage(
+  to: string,
+  message: string,
+  variables?: Record<string, string>
+): Promise<WhatsAppApiResponse> {
+  // This is now just a wrapper around sendWhatsAppTextMessage for backward compatibility
+  return sendWhatsAppTextMessage(to, message, variables);
+}
+
+/**
+ * Send a WhatsApp document message using Evolution API
  * @param to - Recipient phone number
  * @param documentUrl - URL of the document to send
  * @param filename - Filename for the document
@@ -450,52 +480,100 @@ export async function sendWhatsAppDocumentMessage(
         validatedDocumentUrl = `${window.location.origin}${documentUrl}`;
       }
     }
+    // If it's just a partial path (like 'collectionId/recordId/filename.pdf' or 'recordId/filename.pdf')
+    else if (!documentUrl.startsWith('http') && !documentUrl.startsWith('data:')) {
+      // Check if it has the pattern of a PocketBase file path
+      const parts = documentUrl.split('/');
+      if (parts.length >= 2) {
+        // If the path doesn't include the collection ID, add the default one
+        if (parts.length === 2) {
+          // Assuming format: recordId/filename.pdf
+          validatedDocumentUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/pbc_4092854851/${documentUrl}`;
+          console.log('Added collection ID to partial URL:', validatedDocumentUrl);
+        } else {
+          // Assuming format already includes collection ID: collectionId/recordId/filename.pdf
+          validatedDocumentUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/${documentUrl}`;
+          console.log('Added base URL to partial path:', validatedDocumentUrl);
+        }
+      } else {
+        console.warn('Document URL appears to be incomplete:', documentUrl);
+      }
+    }
     
     // Log the document URL for debugging
     console.log('Original document URL:', documentUrl);
     console.log('Validated document URL:', validatedDocumentUrl);
     
-    // Prepare the request data with proper typing
-    const data: {
-      number: string;
-      documentUrl: string;
-      filename: string;
-      caption?: string;
-      variables?: Record<string, string>;
-    } = {
-      number: formattedPhone,
-      documentUrl: validatedDocumentUrl,
-      filename: filename
-    };
-    
-    // Add caption if provided
-    if (caption) {
-      data.caption = caption;
-    }
-    
-    // Add variables if provided
-    if (variables) {
-      data.variables = variables;
+    // Replace variables in the caption if provided
+    let processedCaption = caption;
+    if (caption && variables) {
+      Object.entries(variables).forEach(([key, value]) => {
+        const regex = new RegExp(`{{${key}}}`, 'g');
+        processedCaption = processedCaption?.replace(regex, value);
+      });
     }
     
     // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-document-url');
+    const endpoint = getEvolutionEndpoint('/api/message/sendMedia/{instance}');
     
     // Make the API request
     console.log('Sending WhatsApp document message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
+    console.log('Using Evolution API endpoint:', endpoint);
     
-    const response = await axios.post(endpoint, data);
-    console.log('WhatsApp API response:', response.data);
-    
-    // Return a standardized response
-    return {
-      success: true,
-      message: 'Document message sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
-    };
+    try {
+      const response = await axios.post(endpoint, {
+        number: formattedPhone,
+        options: {
+          delay: 1200,
+          presence: 'composing'
+        },
+        media: {
+          url: validatedDocumentUrl,
+          type: "document",
+          fileName: filename
+        },
+        caption: processedCaption || undefined
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': EVOLUTION_API_KEY
+        }
+      });
+      
+      console.log('Evolution API response:', response.data);
+      
+      // Return a standardized response
+      return {
+        success: true,
+        message: 'Document message sent',
+        messageId: response.data.key?.id || 'unknown',
+        status: response.data.status || 'PENDING',
+        timestamp: response.data.messageTimestamp || new Date().toISOString()
+      };
+    } catch (apiError) {
+      console.error('Evolution API error response:', apiError.response?.data || apiError.message);
+      
+      // Extract error message from the response if available
+      let errorMessage = 'Failed to send WhatsApp document message';
+      if (axios.isAxiosError(apiError)) {
+        console.error('Axios error details:', {
+          status: apiError.response?.status,
+          statusText: apiError.response?.statusText,
+          data: apiError.response?.data,
+          headers: apiError.response?.headers
+        });
+        
+        if (apiError.response?.data?.message) {
+          errorMessage = apiError.response.data.message;
+        } else if (apiError.response?.data?.error) {
+          errorMessage = apiError.response.data.error;
+        } else if (apiError.response?.status === 500) {
+          errorMessage = 'Evolution API server error. The document URL may not be accessible to the API.';
+        }
+      }
+      
+      throw new Error(errorMessage);
+    }
   } catch (error) {
     console.error('Error sending WhatsApp document message:', error);
     
@@ -503,6 +581,8 @@ export async function sendWhatsAppDocumentMessage(
     let errorMessage = 'Failed to send WhatsApp document message';
     if (axios.isAxiosError(error) && error.response?.data?.message) {
       errorMessage = error.response.data.message;
+    } else if (axios.isAxiosError(error) && error.response?.data?.error) {
+      errorMessage = error.response.data.error;
     } else if (error instanceof Error) {
       errorMessage = error.message;
     }
@@ -516,74 +596,7 @@ export async function sendWhatsAppDocumentMessage(
 }
 
 /**
- * Send a WhatsApp message
- * @param to - Recipient phone number
- * @param message - Message content
- * @param variables - Optional variables for template messages
- */
-export async function sendWhatsAppMessage(
-  to: string,
-  message: string,
-  variables?: Record<string, string>
-): Promise<WhatsAppApiResponse> {
-  try {
-    // Format phone number (ensure it has country code and no special chars)
-    const formattedPhone = formatPhoneNumber(to);
-    
-    // Prepare the request data
-    const data: {
-      number: string;
-      message: string;
-      variables?: Record<string, string>;
-    } = {
-      number: formattedPhone,
-      message
-    };
-    
-    // Add variables if provided
-    if (variables) {
-      data.variables = variables;
-    }
-    
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-message');
-    
-    // Make the API request
-    console.log('Sending WhatsApp message to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post(endpoint, data);
-    console.log('WhatsApp API response:', response.data);
-    
-    // Return a standardized response
-    return {
-      success: true,
-      message: 'Message sent',
-      messageId: response.data.messageId || response.data.id,
-      status: response.data.status || 'sent',
-      timestamp: response.data.timestamp || new Date().toISOString()
-    };
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
-    
-    // Extract error message from the response if available
-    let errorMessage = 'Failed to send WhatsApp message';
-    if (axios.isAxiosError(error) && error.response?.data?.message) {
-      errorMessage = error.response.data.message;
-    } else if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    
-    // Return a standardized error response
-    return {
-      success: false,
-      message: errorMessage
-    };
-  }
-}
-
-/**
- * Send an image from URL via WhatsApp
+ * Send an image from URL via WhatsApp using Evolution API
  * @param phoneNumber - Recipient's phone number with country code
  * @param imageUrl - URL of the image to send
  * @param caption - Optional caption for the image
@@ -595,28 +608,16 @@ export async function sendWhatsAppImage(
   caption?: string,
   variables?: Record<string, string | number>
 ): Promise<WhatsAppApiResponse> {
-  try {
-    const formattedPhone = formatPhoneNumber(phoneNumber);
-    
-    // Get the API endpoint with the correct path
-    const endpoint = getWhatsAppEndpoint('/send-image-url');
-    
-    console.log('Sending WhatsApp image to:', formattedPhone);
-    console.log('Using endpoint:', endpoint);
-    
-    const response = await axios.post<WhatsAppApiResponse>(endpoint, {
-      number: formattedPhone,
-      imageUrl,
-      caption,
-      variables
+  // Convert any number variables to strings for compatibility
+  const stringVariables: Record<string, string> = {};
+  if (variables) {
+    Object.entries(variables).forEach(([key, value]) => {
+      stringVariables[key] = String(value);
     });
-    
-    console.log('WhatsApp image sent successfully:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error sending WhatsApp image:', error);
-    throw error;
   }
+  
+  // Use the main image sending function
+  return sendWhatsAppImageMessage(phoneNumber, imageUrl, caption, stringVariables);
 }
 
 /**
@@ -1256,7 +1257,7 @@ function getEstimatedDeliveryDate(): string {
 }
 
 /**
- * Check the WhatsApp API connection status
+ * Check the WhatsApp API connection status using Evolution API
  * @returns Promise with connection status
  */
 export async function checkWhatsAppConnection(): Promise<{
@@ -1265,48 +1266,77 @@ export async function checkWhatsAppConnection(): Promise<{
   message?: string;
 }> {
   try {
+    // Get Evolution API configuration
+    const apiUrl = import.meta.env.VITE_WHATSAPP_API_URL || 'https://crm-evolution-api.7za6uc.easypanel.host/';
+    const apiKey = import.meta.env.VITE_EVOLUTION_API_KEY || '2DE05041EDA5-4A20-BAA6-4B600A785762';
+    const instance = import.meta.env.VITE_EVOLUTION_INSTANCE || 'konipai';
+    
     // Simple detection of environment
     const isProduction = window.location.hostname.includes('easypanel.host');
     
-    // For production environments, always return a positive status
-    // This is the simplest approach to avoid CORS issues
+    // For production environments in Easypanel, use the proxy approach
     if (isProduction) {
-      console.log('Production environment detected, assuming WhatsApp API is connected');
+      console.log('Production environment detected, checking WhatsApp connection via proxy');
       
-      // Return a hardcoded positive status
-      return {
-        connected: true,
-        status: 'connected',
-        message: 'WhatsApp API is assumed to be connected'
-      };
+      try {
+        // Use the proxy endpoint for production
+        const response = await axios.post('/email-api/check-whatsapp-connection', {
+          instance,
+          apiKey
+        });
+        
+        console.log('WhatsApp connection check via proxy successful:', response.data);
+        
+        return {
+          connected: response.data.connected || false,
+          status: response.data.status || 'unknown',
+          message: response.data.message || 'WhatsApp connection status checked via proxy'
+        };
+      } catch (proxyError) {
+        console.error('Error checking WhatsApp connection via proxy:', proxyError);
+        
+        // Fallback to assumed connected in production to prevent UI disruption
+        return {
+          connected: true,
+          status: 'assumed_connected',
+          message: 'WhatsApp API is assumed to be connected (proxy error)'
+        };
+      }
     }
     
-    // For development environments, try direct API access
-    const apiUrl = getWhatsAppApiUrl();
-    const statusEndpoint = apiUrl.endsWith('/') ? 'status' : '/status';
-    const fullUrl = `${apiUrl}${statusEndpoint}`;
+    // For development environments, try direct API access to Evolution API
+    // Format the URL properly - Evolution API uses /instance/instanceName/status endpoint
+    const baseUrl = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
+    const fullUrl = `${baseUrl}instance/${instance}/status`;
     
-    console.log('Checking WhatsApp connection directly at:', fullUrl);
+    console.log('Checking WhatsApp connection with Evolution API at:', fullUrl);
+    console.log('Using instance:', instance);
     
-    // Make direct API request for development environment
+    // Make direct API request to Evolution API
     const response = await axios.get(fullUrl, {
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'apikey': apiKey
       },
       timeout: 5000
     });
     
-    console.log('WhatsApp connection check successful:', response.data);
+    console.log('Evolution API connection check response:', response.data);
     
-    // Return the connection status
+    // Evolution API returns a specific format for status
+    // Check if the instance exists and is connected
+    const connected = response.data?.instance?.state === 'open';
+    
     return {
-      connected: true,
-      status: response.data.status || 'connected',
-      message: response.data.message || 'WhatsApp API is connected'
+      connected,
+      status: connected ? 'connected' : 'disconnected',
+      message: connected ? 
+        `WhatsApp instance ${instance} is connected` : 
+        `WhatsApp instance ${instance} is not connected (state: ${response.data?.instance?.state || 'unknown'})`
     };
   } catch (error) {
-    console.error('Error checking WhatsApp connection:', error);
+    console.error('Error checking WhatsApp connection with Evolution API:', error);
     
     // For development, log detailed error information
     if (axios.isAxiosError(error)) {
@@ -1314,7 +1344,8 @@ export async function checkWhatsAppConnection(): Promise<{
         message: error.message,
         code: error.code,
         status: error.response?.status,
-        statusText: error.response?.statusText
+        statusText: error.response?.statusText,
+        data: error.response?.data
       });
     }
     
@@ -1357,8 +1388,18 @@ export async function sendWhatsAppDirectMessage(
     // Format phone number
     const formattedPhone = formatPhoneNumber(to);
     
+    // Define a type for the WhatsApp direct message data
+    type WhatsAppDirectMessageData = {
+      to: string;
+      message: string;
+      type: 'text' | 'image' | 'video' | 'document';
+      mediaUrl?: string;
+      caption?: string;
+      filename?: string;
+    };
+
     // Prepare the request data
-    const data: Record<string, any> = {
+    const data: WhatsAppDirectMessageData = {
       to: formattedPhone,
       message,
       type

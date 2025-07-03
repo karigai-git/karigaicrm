@@ -289,7 +289,7 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
       console.error('Error generating message from template:', error);
       return preview;
     }
-  }, [templates, selectedTemplate, order, orderItems, preview, variableValues]);
+  }, [selectedTemplate, templates, orderItems, order, preview, variableValues, additionalInfo]);
 
   useEffect(() => {
     if (selectedTemplate) {
@@ -329,13 +329,42 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
     }
   }, [selectedTemplate, additionalInfo, order.id, order.customer_name]);
 
+  // Evolution API configuration from environment variables
+  const EVOLUTION_API_URL = import.meta.env.VITE_WHATSAPP_API_URL || 'https://crm-evolution-api.7za6uc.easypanel.host/';
+  const EVOLUTION_API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || '2DE05041EDA5-4A20-BAA6-4B600A785762';
+  const EVOLUTION_INSTANCE = import.meta.env.VITE_EVOLUTION_INSTANCE || 'konipai';
+
   useEffect(() => {
     const checkConnection = async () => {
-      const connectionStatus = await checkWhatsAppConnection();
-      setIsWhatsAppConnected(connectionStatus.connected);
+      try {
+        // Use the Evolution API connection check
+        console.log('Checking WhatsApp connection with Evolution API...');
+        console.log('Using Evolution API URL:', EVOLUTION_API_URL);
+        console.log('Using Evolution instance:', EVOLUTION_INSTANCE);
+        
+        const connectionStatus = await checkWhatsAppConnection();
+        console.log('Evolution API connection status:', connectionStatus);
+        
+        setIsWhatsAppConnected(connectionStatus.connected);
+        
+        if (!connectionStatus.connected) {
+          console.warn('WhatsApp is not connected. Please check the Evolution API configuration.');
+        }
+      } catch (error) {
+        console.error('Error checking WhatsApp connection:', error);
+        setIsWhatsAppConnected(false);
+      }
     };
+    
+    // Check connection on component mount
     checkConnection();
-  }, []);
+    
+    // Set up periodic connection check every 30 seconds
+    const intervalId = setInterval(checkConnection, 30000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId);
+  }, [EVOLUTION_API_URL, EVOLUTION_INSTANCE]);
 
   useEffect(() => {
     try {
@@ -487,7 +516,7 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
         setVariableValues(initialValues);
       }
     }
-  }, [selectedTemplate, templates, extractTemplateVariables]);
+  }, [selectedTemplate, templates, extractTemplateVariables, additionalInfo, order, preview, variableValues]);
 
   // Handle message sent event
   const handleMessageSent = () => {
@@ -527,12 +556,22 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
       setError(`Please provide ${selectedOption.additionalInfoLabel}`);
       return;
     }
+    
+    // Validate phone number
+    const customerPhone = order.customer_phone;
+    if (!customerPhone) {
+      setError('Customer phone number is required');
+      return;
+    }
 
     setError('');
     setIsSending(true);
 
     try {
-      const customerPhone = order.customer_phone;
+      console.log(`Sending WhatsApp message to ${customerPhone} using Evolution API`);
+      console.log('Evolution API URL:', EVOLUTION_API_URL);
+      console.log('Evolution instance:', EVOLUTION_INSTANCE);
+      
       let response;
 
       // Include product details in the message if available
@@ -551,8 +590,10 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
         let mediaUrlToUse = mediaUrl;
         if (file) {
           try {
+            console.log('Uploading file to PocketBase...');
             const uploadedFile = await uploadFileToPocketBase(file);
             mediaUrlToUse = uploadedFile.url;
+            console.log('File uploaded successfully:', mediaUrlToUse);
           } catch (uploadError) {
             console.error('Error uploading file:', uploadError);
             toast.error('Failed to upload file');
@@ -561,6 +602,9 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
           }
         }
 
+        console.log(`Sending ${selectedMessageType} message with Evolution API`);
+        console.log('Media URL:', mediaUrlToUse);
+        
         switch (selectedMessageType) {
           case 'image':
             response = await sendWhatsAppImageMessage(customerPhone, mediaUrlToUse, messageCaption);
@@ -576,6 +620,8 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
         }
       } else {
         // For text messages, use the template or custom message
+        console.log(`Sending text message with template: ${selectedTemplate}`);
+        
         switch (selectedTemplate) {
           case WhatsAppTemplate.ORDER_CONFIRMATION: {
             // Convert our ParsedOrderItem to the format expected by sendOrderConfirmation
@@ -590,15 +636,19 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
             break;
           }
           case WhatsAppTemplate.PAYMENT_SUCCESS: {
-            response = await sendPaymentSuccess(order, customerPhone, additionalInfo);
+            response = await sendPaymentSuccess(order, customerPhone);
             break;
           }
           case WhatsAppTemplate.PAYMENT_FAILED: {
-            response = await sendPaymentFailed(order, customerPhone);
+            response = await sendPaymentFailed(order, customerPhone, additionalInfo || '');
             break;
           }
           case WhatsAppTemplate.ORDER_SHIPPED: {
-            response = await sendOrderShipped(order, customerPhone, additionalInfo);
+            // Split additionalInfo into tracking link and carrier if available
+            const trackingInfo = additionalInfo ? additionalInfo.split(',') : ['', ''];
+            const trackingLink = trackingInfo[0] || '';
+            const carrier = trackingInfo[1] || '';
+            response = await sendOrderShipped(order, customerPhone, trackingLink, carrier);
             break;
           }
           case WhatsAppTemplate.OUT_FOR_DELIVERY: {
@@ -606,19 +656,25 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
             break;
           }
           case WhatsAppTemplate.ORDER_DELIVERED: {
-            response = await sendOrderDelivered(order, customerPhone);
+            response = await sendOrderDelivered(order, customerPhone, additionalInfo || '');
             break;
           }
           case WhatsAppTemplate.REQUEST_REVIEW: {
-            response = await sendRequestReview(order, customerPhone, additionalInfo);
+            response = await sendRequestReview(order, customerPhone, additionalInfo || '');
             break;
           }
           case WhatsAppTemplate.REFUND_CONFIRMATION: {
-            response = await sendRefundConfirmation(order, customerPhone, additionalInfo);
+            // Convert additionalInfo to number if provided, otherwise use order total
+            const refundAmount = additionalInfo ? parseFloat(additionalInfo) : order.total;
+            response = await sendRefundConfirmation(order, customerPhone, refundAmount);
             break;
           }
           case WhatsAppTemplate.REORDER_REMINDER: {
-            response = await sendReorderReminder(order, customerPhone, additionalInfo);
+            // Split additionalInfo into reorder link and days since delivery if available
+            const reorderInfo = additionalInfo ? additionalInfo.split(',') : ['', '30'];
+            const reorderLink = reorderInfo[0] || '';
+            const daysSinceDelivery = parseInt(reorderInfo[1] || '30', 10);
+            response = await sendReorderReminder(order, customerPhone, daysSinceDelivery, reorderLink);
             break;
           }
           default: {
@@ -626,15 +682,30 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
             if (productDetails) {
               message += '\n\n' + productDetails;
             }
+            if (customMessage) {
+              message += '\n\n' + customMessage;
+            }
+            console.log('Sending custom text message:', message);
             response = await sendWhatsAppTextMessage(customerPhone, message);
             break;
           }
         }
       }
 
+      console.log('WhatsApp API response:', response);
+      
       if (response.success) {
         toast.success('WhatsApp message sent successfully');
         handleMessageSent();
+        
+        // Reset form after successful send
+        if (selectedMessageType !== 'text') {
+          setMediaUrl('');
+          setCaption('');
+          setFilename('');
+          setFile(null);
+        }
+        setCustomMessage('');
       } else {
         toast.error(`Failed to send WhatsApp message: ${response.message}`);
       }
@@ -657,358 +728,362 @@ export function SendWhatsAppMessage({ order, onMessageSent }: SendWhatsAppMessag
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-medium">Send WhatsApp Message</h3>
-        {isWhatsAppConnected ? (
-          <div className="flex items-center text-green-500">
-            <Wifi className="h-4 w-4" />
-            <span className="ml-2">WhatsApp connected</span>
-          </div>
-        ) : (
-          <div className="flex items-center text-red-500">
-            <WifiOff className="h-4 w-4" />
-            <span className="ml-2">WhatsApp not connected</span>
-          </div>
-        )}
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="space-y-4">
-        <div>
-          <Label htmlFor="template">Message Template</Label>
-          <Select
-            value={selectedTemplate}
-            onValueChange={(value) => {
-              setSelectedTemplate(value as WhatsAppTemplate);
-              // Reset additional info when template changes
-              setAdditionalInfo('');
-              // Generate new preview with the new template
-              generateMessageFromTemplate().then(message => {
-                setPreview(message);
-              });
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a template" />
-            </SelectTrigger>
-            <SelectContent>
-              {templates.length > 0 ? (
-                templates
-                  .filter(template => template.isActive) // Only show active templates
-                  .map((template) => (
-                    <SelectItem key={template.name} value={template.name}>
-                      {template.name.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
-                    </SelectItem>
-                  ))
-              ) : (
-                // Fallback to hardcoded templates if no templates are available from PocketBase
-                Object.values(WhatsAppTemplate).map((template) => (
-                  <SelectItem key={template} value={template}>
-                    {template.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
-                  </SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {selectedTemplate && (
-          <div className="space-y-4">
-            {/* Dynamic variable fields based on template content */}
-            {templateVariables.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Template Variables</h3>
-                {templateVariables.map((variable) => {
-                  // Determine input type based on variable name
-                  const isDateType = variable.toLowerCase().includes('date') || 
-                                     variable.toLowerCase().includes('delivery');
-                  const isNumberType = variable.toLowerCase().includes('amount') || 
-                                       variable.toLowerCase().includes('price') || 
-                                       variable.toLowerCase().includes('days');
-                  const isUrlType = variable.toLowerCase().includes('link') || 
-                                    variable.toLowerCase().includes('url');
-                  
-                  return (
-                    <div key={variable} className="space-y-2">
-                      <Label htmlFor={variable}>
-                        {/* Format variable name for display */}
-                        {variable.replace(/([A-Z])/g, ' $1')
-                          .replace(/^./, str => str.toUpperCase())}
-                      </Label>
-                      <Input
-                        id={variable}
-                        type={isDateType ? 'date' : (isNumberType ? 'number' : 'text')}
-                        placeholder={isUrlType ? 'https://example.com' : `Enter ${variable}`}
-                        value={variableValues[variable] || ''}
-                        onChange={(e) => {
-                          // Update the variable value
-                          setVariableValues(prev => ({
-                            ...prev,
-                            [variable]: e.target.value
-                          }));
-                          
-                          // Update preview when variable value changes
-                          generateMessageFromTemplate().then(message => {
-                            setPreview(message);
-                          });
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            
-            {/* Fallback for templates with no variables */}
-            {templateVariables.length === 0 && (
-              <div className="rounded-md bg-blue-50 p-4">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <Info className="h-5 w-5 text-blue-400" aria-hidden="true" />
-                  </div>
-                  <div className="ml-3 flex-1 md:flex md:justify-between">
-                    <p className="text-sm text-blue-700">
-                      This template doesn't require any additional variables.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div>
-          <Label htmlFor="customMessage">Additional Notes (Optional)</Label>
-          <Textarea
-            id="customMessage"
-            value={customMessage}
-            onChange={(e) => setCustomMessage(e.target.value)}
-            placeholder="Add any additional notes to include with the message"
-            rows={3}
-          />
-        </div>
-
-        <div>
-          <Label htmlFor="messageType">Message Type</Label>
-          <Select
-            value={selectedMessageType}
-            onValueChange={setSelectedMessageType}
-          >
-            <SelectTrigger id="messageType">
-              <SelectValue placeholder="Select a message type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="text">Text</SelectItem>
-              <SelectItem value="image">Image</SelectItem>
-              <SelectItem value="video">Video</SelectItem>
-              <SelectItem value="document">Document</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {selectedMessageType !== 'text' && (
-          <div>
-            <Label htmlFor="mediaSource">Media Source</Label>
-            <Select
-              value={mediaSource}
-              onValueChange={(value: 'custom' | 'product') => setMediaSource(value)}
-            >
-              <SelectTrigger id="mediaSource">
-                <SelectValue placeholder="Select a media source" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="custom">Custom</SelectItem>
-                <SelectItem value="product">Ordered Product</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {selectedMessageType !== 'text' && mediaSource === 'custom' && (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="mediaUrl">Media URL</Label>
-              <Input
-                id="mediaUrl"
-                value={mediaUrl}
-                onChange={(e) => setMediaUrl(e.target.value)}
-                placeholder="Enter the media URL"
-              />
-            </div>
-            
-            <div className="border rounded-md p-4">
-              <Label htmlFor="file" className="block mb-2">Upload File</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="file"
-                  type="file"
-                  onChange={handleFileChange}
-                  className="flex-1"
-                />
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => document.getElementById('file')?.click()}
-                  className="flex items-center gap-2"
-                >
-                  <Upload className="h-4 w-4" />
-                  Upload
-                </Button>
-              </div>
-              {file && (
-                <div className="mt-4">
-                  <p className="text-sm text-muted-foreground mb-2">Selected file: {file.name}</p>
-                  {selectedMessageType === 'image' && mediaUrl && (
-                    <div className="mt-2 border rounded-md overflow-hidden">
-                      <img src={mediaUrl} alt="Preview" className="max-w-full h-auto max-h-[200px] object-contain" />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {selectedMessageType !== 'text' && mediaSource === 'product' && (
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="selectedProductId">Select Product</Label>
-              <Select
-                value={selectedProductId}
-                onValueChange={setSelectedProductId}
-              >
-                <SelectTrigger id="selectedProductId">
-                  <SelectValue placeholder="Select a product" />
-                </SelectTrigger>
-                <SelectContent>
-                  {products.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {selectedProductId && (
-              <div className="border rounded-md p-4">
-                {products.find(item => item.id === selectedProductId)?.image && (
-                  <div className="mb-4">
-                    <img 
-                      src={products.find(item => item.id === selectedProductId)?.image} 
-                      alt="Product" 
-                      className="max-w-full h-auto max-h-[200px] object-contain rounded-md"
-                    />
-                  </div>
-                )}
-                <div className="text-sm">
-                  <p className="font-medium">{products.find(item => item.id === selectedProductId)?.name}</p>
-                  <p className="text-muted-foreground mt-1">
-                    Quantity: {products.find(item => item.id === selectedProductId)?.quantity} | 
-                    Price: ₹{products.find(item => item.id === selectedProductId)?.price}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {selectedMessageType !== 'text' && (
-          <div>
-            <Label htmlFor="caption">Caption (Optional)</Label>
-            <Input
-              id="caption"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="Enter a caption for the media"
-            />
-          </div>
-        )}
-
-        {selectedMessageType === 'document' && (
-          <div>
-            <Label htmlFor="filename">Filename</Label>
-            <Input
-              id="filename"
-              value={filename}
-              onChange={(e) => setFilename(e.target.value)}
-              placeholder="Enter the filename"
-            />
-          </div>
-        )}
-
-        <div>
-          <Button 
-            onClick={() => setOpenPreviewDialog(true)} 
-            className="w-full"
-          >
-            <Eye className="mr-2 h-4 w-4" />
-            Preview Message
-          </Button>
-          <Dialog open={openPreviewDialog} onOpenChange={setOpenPreviewDialog}>
-            <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>WhatsApp Message Preview</DialogTitle>
-              </DialogHeader>
-              <div className="flex flex-col space-y-2">
-                <div className="bg-[#202c33] p-3 flex items-center space-x-3 rounded-t-lg">
-                  <Smartphone className="h-5 w-5 text-white" />
-                  <div>
-                    <p className="text-white font-medium text-sm">WhatsApp Preview</p>
-                    <p className="text-gray-400 text-xs">Customer: {order.customer_name}</p>
-                  </div>
-                </div>
-                <div className="bg-[#0b141a] p-4 min-h-[200px] rounded-b-lg">
-                  {selectedMessageType !== 'text' && (mediaUrl || (selectedProductId && products.find(item => item.id === selectedProductId)?.image)) && (
-                    <div className="bg-[#0b141a] mb-2 rounded-lg overflow-hidden">
-                      <img 
-                        src={mediaUrl || (selectedProductId && products.find(item => item.id === selectedProductId)?.image)}
-                        alt="Media Preview"
-                        className="max-w-full h-auto max-h-[200px] object-contain rounded-md"
-                        onError={(e) => {
-                          console.log('Preview image failed to load');
-                          (e.target as HTMLImageElement).src = 'https://placehold.co/200x200/e2e8f0/64748b?text=Image+Preview';
-                        }}
-                      />
-                    </div>
-                  )}
-                  <div className="bg-[#005c4b] text-white p-3 rounded-lg max-w-[80%] ml-auto whitespace-pre-wrap text-sm">
-                    {preview}
-                  </div>
-                  <div className="text-right mt-1">
-                    <span className="text-gray-400 text-xs">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button onClick={() => setOpenPreviewDialog(false)}>Close</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        <Button 
-          onClick={handleSendMessage} 
-          disabled={isSending || !isWhatsAppConnected} 
-          className="w-full"
-        >
-          {isSending ? (
+        {/* WhatsApp connection status */}
+        <div className="flex items-center gap-2 mb-4">
+          {isWhatsAppConnected ? (
             <>
-              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-              Sending...
+              <Wifi className="h-4 w-4 text-green-500" />
+              <span className="text-sm text-green-500">WhatsApp connected (Evolution API)</span>
+              <span className="text-xs text-gray-500 ml-1">{EVOLUTION_INSTANCE}</span>
             </>
           ) : (
             <>
-              <Send className="mr-2 h-4 w-4" />
-              Send WhatsApp Message
+              <WifiOff className="h-4 w-4 text-red-500" />
+              <span className="text-sm text-red-500">WhatsApp not connected</span>
+              <span className="text-xs text-gray-500 ml-1">{EVOLUTION_API_URL}</span>
             </>
           )}
-        </Button>
+        </div>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="template">Message Template</Label>
+            <Select
+              value={selectedTemplate}
+              onValueChange={(value) => {
+                setSelectedTemplate(value as WhatsAppTemplate);
+                // Reset additional info when template changes
+                setAdditionalInfo('');
+                // Generate new preview with the new template
+                generateMessageFromTemplate().then(message => {
+                  setPreview(message);
+                });
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a template" />
+              </SelectTrigger>
+              <SelectContent>
+                {templates.length > 0 ? (
+                  templates
+                    .filter(template => template.isActive) // Only show active templates
+                    .map((template) => (
+                      <SelectItem key={template.name} value={template.name}>
+                        {template.name.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+                      </SelectItem>
+                    ))
+                ) : (
+                  // Fallback to hardcoded templates if no templates are available from PocketBase
+                  Object.values(WhatsAppTemplate).map((template) => (
+                    <SelectItem key={template} value={template}>
+                      {template.split('_').map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(' ')}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedTemplate && (
+            <div className="space-y-4">
+              {/* Dynamic variable fields based on template content */}
+              {templateVariables.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-medium">Template Variables</h3>
+                  {templateVariables.map((variable) => {
+                    // Determine input type based on variable name
+                    const isDateType = variable.toLowerCase().includes('date') || 
+                                       variable.toLowerCase().includes('delivery');
+                    const isNumberType = variable.toLowerCase().includes('amount') || 
+                                         variable.toLowerCase().includes('price') || 
+                                         variable.toLowerCase().includes('days');
+                    const isUrlType = variable.toLowerCase().includes('link') || 
+                                      variable.toLowerCase().includes('url');
+                    
+                    return (
+                      <div key={variable} className="space-y-2">
+                        <Label htmlFor={variable}>
+                          {/* Format variable name for display */}
+                          {variable.replace(/([A-Z])/g, ' $1')
+                            .replace(/^./, str => str.toUpperCase())}
+                        </Label>
+                        <Input
+                          id={variable}
+                          type={isDateType ? 'date' : (isNumberType ? 'number' : 'text')}
+                          placeholder={isUrlType ? 'https://example.com' : `Enter ${variable}`}
+                          value={variableValues[variable] || ''}
+                          onChange={(e) => {
+                            // Update the variable value
+                            setVariableValues(prev => ({
+                              ...prev,
+                              [variable]: e.target.value
+                            }));
+                            
+                            // Update preview when variable value changes
+                            generateMessageFromTemplate().then(message => {
+                              setPreview(message);
+                            });
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              
+              {/* Fallback for templates with no variables */}
+              {templateVariables.length === 0 && (
+                <div className="rounded-md bg-blue-50 p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <Info className="h-5 w-5 text-blue-400" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3 flex-1 md:flex md:justify-between">
+                      <p className="text-sm text-blue-700">
+                        This template doesn't require any additional variables.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <Label htmlFor="customMessage">Additional Notes (Optional)</Label>
+            <Textarea
+              id="customMessage"
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              placeholder="Add any additional notes to include with the message"
+              rows={3}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="messageType">Message Type</Label>
+            <Select
+              value={selectedMessageType}
+              onValueChange={setSelectedMessageType}
+            >
+              <SelectTrigger id="messageType">
+                <SelectValue placeholder="Select a message type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="text">Text</SelectItem>
+                <SelectItem value="image">Image</SelectItem>
+                <SelectItem value="video">Video</SelectItem>
+                <SelectItem value="document">Document</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {selectedMessageType !== 'text' && (
+            <div>
+              <Label htmlFor="mediaSource">Media Source</Label>
+              <Select
+                value={mediaSource}
+                onValueChange={(value: 'custom' | 'product') => setMediaSource(value)}
+              >
+                <SelectTrigger id="mediaSource">
+                  <SelectValue placeholder="Select a media source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="product">Ordered Product</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {selectedMessageType !== 'text' && mediaSource === 'custom' && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="mediaUrl">Media URL</Label>
+                <Input
+                  id="mediaUrl"
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  placeholder="Enter the media URL"
+                />
+              </div>
+              
+              <div className="border rounded-md p-4">
+                <Label htmlFor="file" className="block mb-2">Upload File</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="file"
+                    type="file"
+                    onChange={handleFileChange}
+                    className="flex-1"
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => document.getElementById('file')?.click()}
+                    className="flex items-center gap-2"
+                  >
+                    <Upload className="h-4 w-4" />
+                    Upload
+                  </Button>
+                </div>
+                {file && (
+                  <div className="mt-4">
+                    <p className="text-sm text-muted-foreground mb-2">Selected file: {file.name}</p>
+                    {selectedMessageType === 'image' && mediaUrl && (
+                      <div className="mt-2 border rounded-md overflow-hidden">
+                        <img src={mediaUrl} alt="Preview" className="max-w-full h-auto max-h-[200px] object-contain" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {selectedMessageType !== 'text' && mediaSource === 'product' && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="selectedProductId">Select Product</Label>
+                <Select
+                  value={selectedProductId}
+                  onValueChange={setSelectedProductId}
+                >
+                  <SelectTrigger id="selectedProductId">
+                    <SelectValue placeholder="Select a product" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {products.map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {selectedProductId && (
+                <div className="border rounded-md p-4">
+                  {products.find(item => item.id === selectedProductId)?.image && (
+                    <div className="mb-4">
+                      <img 
+                        src={products.find(item => item.id === selectedProductId)?.image} 
+                        alt="Product" 
+                        className="max-w-full h-auto max-h-[200px] object-contain rounded-md"
+                      />
+                    </div>
+                  )}
+                  <div className="text-sm">
+                    <p className="font-medium">{products.find(item => item.id === selectedProductId)?.name}</p>
+                    <p className="text-muted-foreground mt-1">
+                      Quantity: {products.find(item => item.id === selectedProductId)?.quantity} | 
+                      Price: ₹{products.find(item => item.id === selectedProductId)?.price}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedMessageType !== 'text' && (
+            <div>
+              <Label htmlFor="caption">Caption (Optional)</Label>
+              <Input
+                id="caption"
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Enter a caption for the media"
+              />
+            </div>
+          )}
+
+          {selectedMessageType === 'document' && (
+            <div>
+              <Label htmlFor="filename">Filename</Label>
+              <Input
+                id="filename"
+                value={filename}
+                onChange={(e) => setFilename(e.target.value)}
+                placeholder="Enter the filename"
+              />
+            </div>
+          )}
+
+          <div>
+            <Button 
+              onClick={() => setOpenPreviewDialog(true)} 
+              className="w-full"
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              Preview Message
+            </Button>
+            <Dialog open={openPreviewDialog} onOpenChange={setOpenPreviewDialog}>
+              <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>WhatsApp Message Preview</DialogTitle>
+                </DialogHeader>
+                <div className="flex flex-col space-y-2">
+                  <div className="bg-[#202c33] p-3 flex items-center space-x-3 rounded-t-lg">
+                    <Smartphone className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-white font-medium text-sm">WhatsApp Preview</p>
+                      <p className="text-gray-400 text-xs">Customer: {order.customer_name}</p>
+                    </div>
+                  </div>
+                  <div className="bg-[#0b141a] p-4 min-h-[200px] rounded-b-lg">
+                    {selectedMessageType !== 'text' && (mediaUrl || (selectedProductId && products.find(item => item.id === selectedProductId)?.image)) && (
+                      <div className="bg-[#0b141a] mb-2 rounded-lg overflow-hidden">
+                        <img 
+                          src={mediaUrl || (selectedProductId && products.find(item => item.id === selectedProductId)?.image)}
+                          alt="Media Preview"
+                          className="max-w-full h-auto max-h-[200px] object-contain rounded-md"
+                          onError={(e) => {
+                            console.log('Preview image failed to load');
+                            (e.target as HTMLImageElement).src = 'https://placehold.co/200x200/e2e8f0/64748b?text=Image+Preview';
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="bg-[#005c4b] text-white p-3 rounded-lg max-w-[80%] ml-auto whitespace-pre-wrap text-sm">
+                      {preview}
+                    </div>
+                    <div className="text-right mt-1">
+                      <span className="text-gray-400 text-xs">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button onClick={() => setOpenPreviewDialog(false)}>Close</Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <Button 
+            onClick={handleSendMessage} 
+            disabled={isSending} 
+            className="w-full mt-2"
+          >
+            {isSending ? (
+              <>
+                <span className="animate-pulse">Sending...</span>
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4 mr-2" />
+                Send WhatsApp {!isWhatsAppConnected && '(API not connected)'}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
