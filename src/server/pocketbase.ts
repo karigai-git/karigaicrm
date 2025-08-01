@@ -4,13 +4,13 @@ import axios from 'axios';
 dotenv.config();
 
 // Initialize PocketBase with the URL from environment variables
-const POCKETBASE_URL = process.env.VITE_POCKETBASE_URL || 'https://backend-karigaibackend.7za6uc.easypanel.host';
+const POCKETBASE_URL = 'https://backend-karigaibackend.7za6uc.easypanel.host';
 const POCKETBASE_ADMIN_EMAIL = process.env.VITE_POCKETBASE_ADMIN_EMAIL || 'karigaishree@gmail.com';
 const POCKETBASE_ADMIN_PASSWORD = process.env.VITE_POCKETBASE_ADMIN_PASSWORD;
 
 console.log('PocketBase URL:', POCKETBASE_URL);
 
-// Use the working token from the curl command
+// Use the token from the working curl command
 const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjb2xsZWN0aW9uSWQiOiJwYmNfMzE0MjYzNTgyMyIsImV4cCI6MTc1NDE1NTU0OCwiaWQiOiI1MDRjOXFlODIzMHVjNjgiLCJyZWZyZXNoYWJsZSI6ZmFsc2UsInR5cGUiOiJhdXRoIn0.s_vJH8tdtODJhOIpYluBxALPglNVS6FJxNGT_Qmnnt0';
 
 export const getAuthToken = async () => {
@@ -28,39 +28,30 @@ export const createWhatsAppActivity = async (data: {
   media_url?: string;
 }) => {
   try {
-    console.log('Attempting to create WhatsApp activity with data:', JSON.stringify(data));
+    console.log('Creating WhatsApp activity using direct curl approach');
+    console.log('Data received:', JSON.stringify(data));
     
-    // Log the incoming data for debugging
-    console.log('Creating WhatsApp activity with raw data:', JSON.stringify(data));
-    
-    // Format data according to PocketBase API documentation
-    const formattedData: Record<string, any> = {
+    // Format data exactly like the working curl command
+    const formattedData = {
+      order_id: data.order_id, // Pass order ID directly as in curl example
       recipient: data.recipient,
       template_name: data.template_name || '',
       message_content: data.message_content,
       status: data.status,
-      error_message: data.error_message || '',
       timestamp: new Date().toISOString(),
+      error_message: data.error_message || ''
     };
     
-    // Handle order_id relation field
-    if (data.order_id && data.order_id.trim() !== '') {
-      // For relation fields in PocketBase, we can pass the ID directly
-      formattedData.order_id = data.order_id;
-      console.log(`Setting order_id relation to: "${data.order_id}"`);  
-    }
-    
     // Add media_url if provided
-    if (data.media_url) {
+    if (data.media_url && data.media_url.trim() !== '') {
       formattedData['media_url'] = data.media_url;
     }
-
-    console.log('Creating record in whatsapp_activities collection with formatted data:', JSON.stringify(formattedData));
     
-    // Use direct HTTP request with the working token
-    // Add ?expand=0 to prevent PocketBase from trying to expand relations
+    console.log('Sending formatted data to PocketBase:', JSON.stringify(formattedData));
+    
+    // Make the API call exactly like the curl command
     const response = await axios.post(
-      `${POCKETBASE_URL}/api/collections/whatsapp_activities/records?expand=0`,
+      `${POCKETBASE_URL}/api/collections/whatsapp_activities/records`,
       formattedData,
       {
         headers: {
@@ -70,14 +61,13 @@ export const createWhatsAppActivity = async (data: {
       }
     );
     
-    console.log('WhatsApp activity recorded successfully:', response.data.id);
+    console.log('WhatsApp activity created successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Failed to record WhatsApp activity:', error);
-    if (error.response) {
-      console.error('Error response:', error.response.data);
-      console.error('Error status:', error.response.status);
+    console.error('Failed to create WhatsApp activity:', error);
+    if (axios.isAxiosError(error) && error.response) {
+      console.error('API Error Response:', error.response.data);
     }
-    return null;
+    throw error;
   }
 };
