@@ -40,8 +40,8 @@ export const initAdmin = async (retryCount = 0) => {
     }
     
     // For demo/development fallback credentials 
-    const email = import.meta.env.POCKETBASE_ADMIN_EMAIL || 'nnirmal7107@gmail.com';
-    const password = import.meta.env.POCKETBASE_ADMIN_PASSWORD || 'Kamala@7107';
+    const email = import.meta.env.VITE_POCKETBASE_ADMIN_EMAIL || 'nnirmal7107@gmail.com';
+    const password = import.meta.env.VITE_POCKETBASE_ADMIN_PASSWORD || 'Kamala@7107';
     
     // Wrap the auth request in a timeout
     let timeoutId: any = null;

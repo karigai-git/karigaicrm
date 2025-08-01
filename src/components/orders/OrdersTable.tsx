@@ -69,9 +69,19 @@ const getPaymentStatusBadge = (status: PaymentStatus) => {
     failed: { color: 'bg-red-100 text-red-800', label: 'Failed' },
     refunded: { color: 'bg-gray-100 text-gray-800', label: 'Refunded' }
   };
-  
-  const { color, label } = variants[status];
-  
+
+  const variant = variants[status];
+
+  if (!variant) {
+    return (
+      <Badge variant="outline" className="bg-gray-100 text-gray-800 border-none capitalize">
+        {status || 'N/A'}
+      </Badge>
+    );
+  }
+
+  const { color, label } = variant;
+
   return (
     <Badge variant="outline" className={`${color} border-none`}>
       {label}
