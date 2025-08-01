@@ -3,6 +3,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import emailRoutes from '../api/email';
+import evolutionRoutes from './evolutionService';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createServer } from 'http';
@@ -24,8 +25,30 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Request started`);
+  
+  // Log request body for POST/PUT requests
+  if ((req.method === 'POST' || req.method === 'PUT') && req.body) {
+    console.log('Request body:', JSON.stringify(req.body));
+  }
+  
+  // Capture response
+  const originalSend = res.send;
+  res.send = function(body) {
+    const duration = Date.now() - start;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Response sent in ${duration}ms with status ${res.statusCode}`);
+    return originalSend.call(this, body);
+  };
+  
+  next();
+});
+
 // Routes
 app.use('/api/email', emailRoutes);
+app.use('/api/evolution', evolutionRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
