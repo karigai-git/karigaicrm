@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquare, Edit, Trash2, Plus, Save, X, CheckCircle2 } from 'lucide-react';
-import { WhatsAppTemplate } from '@/lib/whatsapp';
+
 import { useWhatsAppTemplates, Template } from '@/hooks/useWhatsAppTemplates';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';

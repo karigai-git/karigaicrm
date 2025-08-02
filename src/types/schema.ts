@@ -54,9 +54,9 @@ export interface Coupon extends BaseRecord {
 
 export interface Order extends BaseRecord {
   id: string;
-  user: string[];
+  user: string[]; // This seems to be the user ID
   status: 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
-  products: string;
+  products: string; // This seems to be a summary string
   totalAmount: number;
   subtotal: number;
   total: number;
@@ -74,17 +74,32 @@ export interface Order extends BaseRecord {
   tracking_link?: string;
   shipping_carrier?: string;
   refund_amount?: number;
+
+  // Fields that were causing errors, added based on component usage
+  shipping_fee?: number;
+  tax?: number;
+  discount?: number;
+  user_name: string; // This seems redundant with customer_name
+  user_email: string; // This seems redundant with customer_email
+  payment_method: string;
+  payment_id?: string;
+
   expand?: {
     user?: User[];
     coupon_id?: Coupon;
+    items?: OrderItem[];
+    shipping_address?: Address;
   };
 }
 
 export interface OrderItem extends BaseRecord {
+  id: string; // Added id based on component usage
   order_id: string;
   product_id: string;
   quantity: number;
   price: number;
+  name: string; // Added name based on component usage
+  image: string; // Added image based on component usage
   expand?: {
     product_id?: Product;
   };

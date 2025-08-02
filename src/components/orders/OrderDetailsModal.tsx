@@ -29,7 +29,7 @@ import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { useWhatsAppActivities } from '@/hooks/useWhatsAppActivities';
 import { WhatsAppActivities } from './WhatsAppActivities';
-import { SendWhatsAppMessage } from './SendWhatsAppMessage';
+import SendEvolutionMessage from './SendEvolutionMessage';
 
 interface OrderDetailsModalProps {
   order: Order | null;
@@ -49,13 +49,7 @@ function WhatsAppActivitiesTab({ orderId, order }: { orderId: string, order: Ord
   
   return (
     <div className="space-y-6">
-      {/* Send WhatsApp Message Section */}
-      <div className="border rounded-md p-4">
-        <SendWhatsAppMessage 
-          order={order} 
-          onMessageSent={handleMessageSent} 
-        />
-      </div>
+      <SendEvolutionMessage order={order} onMessageSent={handleMessageSent} />
       
       {/* WhatsApp Activity History Section */}
       <div className="border rounded-md p-4">
@@ -123,30 +117,35 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           {/* Items tab */}
           <TabsContent value="items" className="space-y-4">
             <div className="space-y-4">
-              {order.items.map((item) => (
-                <div key={item.id} className="flex items-center border rounded-md p-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 mr-4">
-                    {item.product_image ? (
-                      <img src={item.product_image} alt={item.product_name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        <Package size={24} />
+              {(order.expand?.items || []).map((item) => {
+                const product = item.expand?.product_id;
+                const total = item.quantity * item.price;
+
+                return (
+                  <div key={item.id} className="flex items-center border rounded-md p-4">
+                    <div className="w-16 h-16 bg-gray-100 rounded-md overflow-hidden flex-shrink-0 mr-4">
+                      {product?.image ? (
+                        <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          <Package size={24} />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <h4 className="font-medium">{product?.name || 'N/A'}</h4>
+                      <div className="text-sm text-gray-500">
+                        {item.quantity} x ₹{item.price.toFixed(2)}
                       </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h4 className="font-medium">{item.product_name}</h4>
-                    <div className="text-sm text-gray-500">
-                      {item.quantity} x ₹{item.product_price.toFixed(2)}
+                    </div>
+                    
+                    <div className="text-right font-medium">
+                      ₹{total.toFixed(2)}
                     </div>
                   </div>
-                  
-                  <div className="text-right font-medium">
-                    ₹{item.total.toFixed(2)}
-                  </div>
-                </div>
-              ))}
+                );
+              })} 
             </div>
             
             <div className="border rounded-md p-4 mt-4">
@@ -255,16 +254,25 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
             <div className="border rounded-md p-4">
               <h3 className="text-sm font-medium mb-2 flex items-center">
                 <MapPin size={16} className="mr-2 text-gray-500" />
-                Shipping Address
+                Shipping Information
               </h3>
-              <div className="mt-4">
-                <p className="font-medium">{order.shipping_address.name}</p>
-                <p>{order.shipping_address.street}</p>
-                <p>
-                  {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.postal_code}
-                </p>
-                <p>{order.shipping_address.country}</p>
-                <p className="mt-2">Phone: {order.shipping_address.phone}</p>
+              
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                  <Label className="text-xs text-gray-500">Shipping Address</Label>
+                  {order.expand?.shipping_address ? (
+                    <>
+                      <p>{order.expand.shipping_address.street}, {order.expand.shipping_address.city}, {order.expand.shipping_address.state} - {order.expand.shipping_address.postal_code}</p>
+                      <p>{order.expand.shipping_address.country}</p>
+                    </>
+                  ) : (
+                    <p>{order.shipping_address_text || 'N/A'}</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Shipping Method</Label>
+                  <p>{order.shipping_carrier || 'Standard Shipping'}</p>
+                </div>
               </div>
             </div>
             

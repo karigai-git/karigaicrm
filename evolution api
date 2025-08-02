@@ -1,0 +1,29 @@
+connection test api
+
+curl --request GET \
+  --url https://crm-evolution-api.7za6uc.easypanel.host/instance/connectionState/karigai \
+  --header 'apikey: F01FDBE15B17-4688-A2E6-941694646658'
+
+
+
+Send media api this will get the product images fromm the product details image from backend 
+
+  curl --request POST \
+  --url https://crm-evolution-api.7za6uc.easypanel.host/message/sendMedia/{instance} \
+  --header 'Content-Type: application/json' \
+  --header 'apikey: F01FDBE15B17-4688-A2E6-941694646658' \
+  --data '{
+  "number": "<string>",
+  "options": {
+    "delay": 123,
+    "presence": "composing"
+  },
+  "mediaMessage": {
+    "mediaType": "image",
+    "fileName": "evolution-api.pdf",
+    "caption": "<string>",
+    "media": "<string>"
+  }
+}'
+
+

@@ -2,15 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pb, ensureAdminAuth } from '@/lib/pocketbase';
 import { Order, Product, UpdateOrderData as SchemaUpdateOrderData } from '@/types/schema';
 import { toast } from 'sonner';
-import {
-  sendOrderConfirmation,
-  sendPaymentSuccess,
-  sendPaymentFailed,
-  sendOrderShipped,
-  sendOutForDelivery,
-  sendOrderDelivered,
-  sendRefundConfirmation,
-} from '@/lib/whatsapp';
+import { sendWhatsAppMessage } from '@/lib/evolution';
 
 export interface CreateOrderData {
   user_id: string;
@@ -91,8 +83,13 @@ export function useOrders() {
               };
             });
             
-            sendOrderConfirmation(order, items, order.customer_phone)
-              .catch(err => console.error('Failed to send WhatsApp confirmation:', err));
+            // Send WhatsApp order confirmation
+            const confirmationMessage = `🎉 *Order Confirmed* 🎉\n\nHi ${order.customer_name},\n\nYour order #${order.id.slice(0, 8)} has been confirmed!\n\nThank you for shopping with us.\n\nWe'll update you when your order ships.`;
+            sendWhatsAppMessage({
+              phone: order.customer_phone,
+              message: confirmationMessage,
+              orderId: order.id
+            }).catch(err => console.error('Failed to send WhatsApp confirmation:', err));
           });
         }
       } catch (whatsappError) {
@@ -129,8 +126,13 @@ export function useOrders() {
             case 'processing':
               // If payment is successful, send payment success notification
               if (paymentStatus === 'paid') {
-                sendPaymentSuccess(orderRecord, orderRecord.customer_phone)
-                  .catch(err => console.error('Failed to send payment success notification:', err));
+                // Send payment success notification
+                const paymentMessage = `✅ *Payment Successful* ✅\n\nHi ${orderRecord.customer_name},\n\nYour payment of ₹${orderRecord.total} for order #${orderRecord.id.slice(0, 8)} has been successfully received.\n\nThank you for your purchase!`;
+                sendWhatsAppMessage({
+                  phone: orderRecord.customer_phone,
+                  message: paymentMessage,
+                  orderId: orderRecord.id
+                }).catch(err => console.error('Failed to send payment success notification:', err));
               }
               break;
               
@@ -139,21 +141,36 @@ export function useOrders() {
               const trackingLink = orderRecord.tracking_link || `${window.location.origin}/track/${orderRecord.id}`;
               const carrier = orderRecord.shipping_carrier || 'Our Delivery Partner';
               
-              sendOrderShipped(orderRecord, orderRecord.customer_phone, trackingLink, carrier)
-                .catch(err => console.error('Failed to send order shipped notification:', err));
+              // Send order shipped notification
+              const shippedMessage = `🚚 *Order Shipped* 🚚\n\nHi ${orderRecord.customer_name},\n\nGreat news! Your order #${orderRecord.id.slice(0, 8)} has been shipped.\n\nCarrier: ${carrier}\nTracking: ${trackingLink}\n\nThank you for your patience!`;
+              sendWhatsAppMessage({
+                phone: orderRecord.customer_phone,
+                message: shippedMessage,
+                orderId: orderRecord.id
+              }).catch(err => console.error('Failed to send order shipped notification:', err));
               break;
             }
               
             case 'out_for_delivery':
-              sendOutForDelivery(orderRecord, orderRecord.customer_phone)
-                .catch(err => console.error('Failed to send out for delivery notification:', err));
+              // Send out for delivery notification
+              const deliveryMessage = `🚚 *Out for Delivery* 🚚\n\nHi ${orderRecord.customer_name},\n\nYour order #${orderRecord.id.slice(0, 8)} is out for delivery today!\n\nPlease ensure someone is available to receive it.\n\nExcited for you to receive your items!`;
+              sendWhatsAppMessage({
+                phone: orderRecord.customer_phone,
+                message: deliveryMessage,
+                orderId: orderRecord.id
+              }).catch(err => console.error('Failed to send out for delivery notification:', err));
               break;
               
             case 'delivered': {
               const feedbackLink = `${window.location.origin}/feedback/${orderRecord.id}`;
               
-              sendOrderDelivered(orderRecord, orderRecord.customer_phone, feedbackLink)
-                .catch(err => console.error('Failed to send order delivered notification:', err));
+              // Send order delivered notification
+              const deliveredMessage = `📦 *Order Delivered* 📦\n\nHi ${orderRecord.customer_name},\n\nYour order #${orderRecord.id.slice(0, 8)} has been delivered!\n\nWe hope you love your purchase. Please share your feedback here: ${feedbackLink}\n\nThank you for shopping with us!`;
+              sendWhatsAppMessage({
+                phone: orderRecord.customer_phone,
+                message: deliveredMessage,
+                orderId: orderRecord.id
+              }).catch(err => console.error('Failed to send order delivered notification:', err));
               break;
             }
               
@@ -162,8 +179,13 @@ export function useOrders() {
               if (data.refund_amount || orderRecord.refund_amount) {
                 const refundAmount = data.refund_amount || orderRecord.refund_amount || orderRecord.totalAmount;
                 
-                sendRefundConfirmation(orderRecord, orderRecord.customer_phone, refundAmount)
-                  .catch(err => console.error('Failed to send refund confirmation:', err));
+                // Send refund confirmation
+                const refundMessage = `💰 *Refund Processed* 💰\n\nHi ${orderRecord.customer_name},\n\nWe've processed your refund of ₹${refundAmount} for order #${orderRecord.id.slice(0, 8)}.\n\nThe amount should appear in your account within 5-7 business days.\n\nThank you for your patience.`;
+                sendWhatsAppMessage({
+                  phone: orderRecord.customer_phone,
+                  message: refundMessage,
+                  orderId: orderRecord.id
+                }).catch(err => console.error('Failed to send refund confirmation:', err));
               }
               break;
           }
@@ -174,13 +196,23 @@ export function useOrders() {
           const orderRecord = record as unknown as Order;
           
           if (data.payment_status === 'paid') {
-            sendPaymentSuccess(orderRecord, orderRecord.customer_phone)
-              .catch(err => console.error('Failed to send payment success notification:', err));
+            // Send payment success notification
+            const paymentMessage = `✅ *Payment Successful* ✅\n\nHi ${orderRecord.customer_name},\n\nYour payment of ₹${orderRecord.total} for order #${orderRecord.id.slice(0, 8)} has been successfully received.\n\nThank you for your purchase!`;
+            sendWhatsAppMessage({
+              phone: orderRecord.customer_phone,
+              message: paymentMessage,
+              orderId: orderRecord.id
+            }).catch(err => console.error('Failed to send payment success notification:', err));
           } else if (data.payment_status === 'failed') {
             const retryUrl = `${window.location.origin}/checkout/retry/${orderRecord.id}`;
             
-            sendPaymentFailed(orderRecord, orderRecord.customer_phone, retryUrl)
-              .catch(err => console.error('Failed to send payment failed notification:', err));
+            // Send payment failed notification
+            const failedMessage = `❌ *Payment Failed* ❌\n\nHi ${orderRecord.customer_name},\n\nWe couldn't process your payment of ₹${orderRecord.total} for order #${orderRecord.id.slice(0, 8)}.\n\nPlease try again using this link: ${retryUrl}\n\nIf you need assistance, reply to this message.`;
+            sendWhatsAppMessage({
+              phone: orderRecord.customer_phone,
+              message: failedMessage,
+              orderId: orderRecord.id
+            }).catch(err => console.error('Failed to send payment failed notification:', err));
           }
         }
         

@@ -12,7 +12,8 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,22 +25,32 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Order, OrderStatus, PaymentStatus } from '@/lib/types';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Order } from '@/types/schema';
+
+// Define OrderStatus and PaymentStatus types to match the schema
+type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'out_for_delivery';
+type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 import { 
   ChevronDown, 
   Search, 
   MoreHorizontal, 
   Eye, 
   Edit, 
-  AlertCircle 
+  AlertCircle,
+  Printer,
+  Calendar
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { OrderPrintManager, printOrder } from './OrderPrintManager';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 
 interface OrdersTableProps {
   orders: Order[];
   isLoading?: boolean;
   onViewOrder: (order: Order) => void;
   onUpdateStatus: (orderId: string, status: OrderStatus) => void;
+  onRefresh?: () => void;
 }
 
 // Function to render status badges
@@ -49,7 +60,8 @@ const getStatusBadge = (status: OrderStatus) => {
     processing: { color: 'bg-blue-100 text-blue-800', label: 'Processing' },
     shipped: { color: 'bg-purple-100 text-purple-800', label: 'Shipped' },
     delivered: { color: 'bg-green-100 text-green-800', label: 'Delivered' },
-    cancelled: { color: 'bg-red-100 text-red-800', label: 'Cancelled' }
+    cancelled: { color: 'bg-red-100 text-red-800', label: 'Cancelled' },
+    out_for_delivery: { color: 'bg-indigo-100 text-indigo-800', label: 'Out for Delivery' }
   };
   
   const { color, label } = variants[status];
@@ -93,27 +105,71 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
   orders, 
   isLoading, 
   onViewOrder, 
-  onUpdateStatus 
+  onUpdateStatus,
+  onRefresh 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedOrders, setSelectedOrders] = useState<Order[]>([]);
+  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   
-  // Filter orders based on search query and status filter
+  // Handle order selection
+  const toggleOrderSelection = (order: Order) => {
+    setSelectedOrders(prev => {
+      const isSelected = prev.some(o => o.id === order.id);
+      if (isSelected) {
+        return prev.filter(o => o.id !== order.id);
+      } else {
+        return [...prev, order];
+      }
+    });
+  };
+
+  // Handle select all orders
+  const toggleSelectAll = () => {
+    if (selectedOrders.length === filteredOrders.length) {
+      setSelectedOrders([]);
+    } else {
+      setSelectedOrders([...filteredOrders]);
+    }
+  };
+
+  // Handle single order print
+  const handlePrintSingleOrder = (order: Order) => {
+    setSelectedOrders([order]);
+    // The actual printing is handled by OrderPrintManager
+  };
+  
+  // Filter orders based on search query, status filter, and date range
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.user_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.user_email.toLowerCase().includes(searchQuery.toLowerCase());
+      (order.customer_name && order.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (order.customer_email && order.customer_email.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
-    return matchesSearch && matchesStatus;
+    // Date range filtering
+    let matchesDateRange = true;
+    if (dateRange.from) {
+      const orderDate = new Date(order.created);
+      matchesDateRange = orderDate >= dateRange.from;
+      
+      if (dateRange.to) {
+        // Set the end of day for the to date
+        const endDate = new Date(dateRange.to);
+        endDate.setHours(23, 59, 59, 999);
+        matchesDateRange = matchesDateRange && orderDate <= endDate;
+      }
+    }
+    
+    return matchesSearch && matchesStatus && matchesDateRange;
   });
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      {/* Filters and Actions */}
+      <div className="flex flex-col sm:flex-row gap-4 items-end">
         <div className="relative flex-1">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
           <Input
@@ -124,40 +180,78 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
           />
         </div>
         
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="processing">Processing</SelectItem>
-            <SelectItem value="shipped">Shipped</SelectItem>
-            <SelectItem value="delivered">Delivered</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap gap-2 items-center">
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            className="w-full sm:w-auto"
+            placeholder="Filter by date"
+          />
+          
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
+              <SelectItem value="shipped">Shipped</SelectItem>
+              <SelectItem value="delivered">Delivered</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          {/* Print Manager */}
+          <OrderPrintManager 
+            selectedOrders={selectedOrders} 
+            allOrders={filteredOrders} 
+          />
+          
+          {/* Refresh Button */}
+          {onRefresh && (
+            <Button variant="outline" size="sm" onClick={onRefresh}>
+              Refresh
+            </Button>
+          )}
+        </div>
       </div>
+      
+      {/* Selected Orders Info */}
+      {selectedOrders.length > 0 && (
+        <div className="bg-blue-50 p-2 rounded-md text-sm flex justify-between items-center">
+          <span>
+            {selectedOrders.length} order{selectedOrders.length !== 1 ? 's' : ''} selected
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedOrders([])}>Clear selection</Button>
+        </div>
+      )}
       
       {/* Table */}
       <div className="border rounded-md">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[30px]">
+                <Checkbox 
+                  checked={filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length}
+                  onCheckedChange={toggleSelectAll}
+                />
+              </TableHead>
               <TableHead className="w-[100px]">Order ID</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead className="w-[80px]"></TableHead>
+              <TableHead className="w-[120px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               Array(5).fill(0).map((_, i) => (
                 <TableRow key={i}>
-                  {Array(7).fill(0).map((_, j) => (
+                  {Array(8).fill(0).map((_, j) => (
                     <TableCell key={j}>
                       <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
                     </TableCell>
@@ -166,7 +260,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
               ))
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                   <div className="flex flex-col items-center">
                     <AlertCircle size={24} className="mb-2" />
                     <p>No orders found matching your filters.</p>
@@ -175,40 +269,57 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
               </TableRow>
             ) : (
               filteredOrders.map((order) => (
-                <TableRow key={order.id}>
+                <TableRow key={order.id} className={selectedOrders.some(o => o.id === order.id) ? 'bg-blue-50' : ''}>
+                  <TableCell>
+                    <Checkbox 
+                      checked={selectedOrders.some(o => o.id === order.id)}
+                      onCheckedChange={() => toggleOrderSelection(order)}
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{order.id.slice(0, 8)}</TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{order.user_name}</div>
-                      <div className="text-xs text-gray-500">{order.user_email}</div>
+                      <div className="font-medium">{order.customer_name || order.user_name || 'N/A'}</div>
+                      <div className="text-xs text-gray-500">{order.customer_email || order.user_email || 'N/A'}</div>
                     </div>
                   </TableCell>
                   <TableCell>{getStatusBadge(order.status)}</TableCell>
                   <TableCell>{getPaymentStatusBadge(order.payment_status)}</TableCell>
                   <TableCell className="text-right font-medium">
-                    ₹{order.total.toFixed(2)}
+                    ₹{order.total?.toFixed(2) || '0.00'}
                   </TableCell>
                   <TableCell className="text-sm text-gray-500">
                     {format(new Date(order.created), 'dd MMM yyyy')}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onViewOrder(order)}>
-                          <Eye size={14} className="mr-2" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit size={14} className="mr-2" />
-                          Update Status
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center space-x-1">
+                      <Button variant="ghost" size="icon" onClick={() => onViewOrder(order)}>
+                        <Eye size={16} />
+                      </Button>
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal size={16} />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => onViewOrder(order)}>
+                            <Eye size={14} className="mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Edit size={14} className="mr-2" />
+                            Update Status
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handlePrintSingleOrder(order)}>
+                            <Printer size={14} className="mr-2" />
+                            Print Slip
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

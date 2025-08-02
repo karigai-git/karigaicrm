@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pb, ensureAdminAuth } from '@/lib/pocketbase';
 import { toast } from 'sonner';
-import { WhatsAppActivity } from '@/lib/whatsapp';
+
 import { Order } from '@/types/schema';
 
 export interface WhatsAppActivityRecord extends WhatsAppActivity {

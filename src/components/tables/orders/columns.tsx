@@ -2,6 +2,8 @@ import { Order } from '@/types/schema';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDate } from '@/lib/utils';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Eye, MoreHorizontal, Printer } from 'lucide-react';
 
 type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'success' | 'warning';
 
@@ -82,8 +84,27 @@ export const columns = (onView: (order: Order) => void) => [
     cell: (order: Order) => (
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => onView(order)}>
+          <Eye size={16} className="mr-2" />
           View
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm">
+              <MoreHorizontal size={16} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onView(order)}>
+              <Eye size={14} className="mr-2" />
+              View Details
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => window.dispatchEvent(new CustomEvent('print-order', { detail: order }))}>
+              <Printer size={14} className="mr-2" />
+              Print Slip
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     ),
   },

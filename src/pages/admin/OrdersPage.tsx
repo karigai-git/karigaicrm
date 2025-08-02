@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { PlusIcon } from 'lucide-react';
 import { CreateOrderDialog } from '@/components/dialogs/CreateOrderDialog';
 import { ViewOrderDialog } from '@/components/dialogs/ViewOrderDialog';
+import { PrintOrderDialog } from '@/components/dialogs/PrintOrderDialog';
 import { Order } from '@/types/schema';
 
 const OrdersPage: React.FC = () => {
@@ -51,7 +52,23 @@ const OrdersPage: React.FC = () => {
         <CreateOrderDialog
           open={isCreateDialogOpen}
           onOpenChange={setIsCreateDialogOpen}
-          onSubmit={createOrder.mutateAsync}
+          onSubmit={async (data) => {
+            try {
+              // Convert data to match the CreateOrderData type from useOrders.ts
+              const orderData = {
+                user_id: '', // Will be filled by backend
+                status: data.status || 'pending',
+                total_amount: data.totalAmount || 0,
+                // Add any other required fields
+                shipping_address: data.shipping_address_text,
+                // Convert products to items array if needed
+                items: data.products ? JSON.parse(data.products) : []
+              };
+              await createOrder.mutateAsync(orderData);
+            } catch (error) {
+              console.error('Failed to create order:', error);
+            }
+          }}
         />
 
         <ViewOrderDialog
@@ -59,6 +76,9 @@ const OrdersPage: React.FC = () => {
           onOpenChange={setIsViewDialogOpen}
           order={selectedOrder}
         />
+        
+        {/* Add PrintOrderDialog to handle print slip functionality */}
+        <PrintOrderDialog />
       </div>
     </AdminLayout>
   );
