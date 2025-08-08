@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build script for the Konipai CRM Trove application using Nixpacks
+# Build script for the Zenthra CRM Trove application using Nixpacks
 
 set -e  # Exit immediately if a command exits with a non-zero status
 
@@ -8,7 +8,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}=== Starting Nixpacks build for Konipai CRM ===${NC}"
+echo -e "${YELLOW}=== Starting Nixpacks build for Zenthra CRM ===${NC}"
 
 # Check if Nixpacks is installed
 if ! command -v nixpacks &> /dev/null; then

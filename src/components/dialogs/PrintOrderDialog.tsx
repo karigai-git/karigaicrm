@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Printer } from 'lucide-react';
 import { PrintableSlip } from '../orders/PrintableSlip';
+import { pb, ensureAdminAuth } from '@/lib/pocketbase';
 import { Order } from '@/types/schema';
 import { toast } from 'sonner';
 
@@ -27,22 +28,62 @@ export const PrintOrderDialog: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
+  // Helper to load expanded orders for accurate printing
+  const loadExpanded = async (orders: Order[]): Promise<Order[]> => {
+    try {
+      await ensureAdminAuth();
+      const enriched = await Promise.all(
+        orders.map(async (o) => {
+          try {
+            const rec = await pb.collection('orders').getOne(o.id, {
+              expand: 'items,shipping_address,items.product_id',
+            });
+            return rec as unknown as Order;
+          } catch {
+            return o;
+          }
+        })
+      );
+      return enriched;
+    } catch {
+      return orders;
+    }
+  };
+
   // Listen for print-order events
   useEffect(() => {
-    const handlePrintOrder = (event: CustomEvent<Order>) => {
-      setOrdersToPrint([event.detail]);
+    const handlePrintOrder = async (event: CustomEvent<Order>) => {
+      const list = await loadExpanded([event.detail]);
+      setOrdersToPrint(list);
       setIsOpen(true);
     };
 
-    window.addEventListener('print-order', handlePrintOrder as EventListener);
+    window.addEventListener('print-order', handlePrintOrder as unknown as EventListener);
     
     return () => {
-      window.removeEventListener('print-order', handlePrintOrder as EventListener);
+      window.removeEventListener('print-order', handlePrintOrder as unknown as EventListener);
     };
   }, []);
 
+  // Listen for print-orders events (multiple orders)
+  useEffect(() => {
+    const handlePrintOrders = async (event: CustomEvent<{ orders: Order[] }>) => {
+      const list = event?.detail?.orders || [];
+      if (Array.isArray(list) && list.length > 0) {
+        const enriched = await loadExpanded(list);
+        setOrdersToPrint(enriched);
+        setIsOpen(true);
+      } else {
+        toast.error('No orders selected for printing');
+      }
+    };
+
+    window.addEventListener('print-orders', handlePrintOrders as unknown as EventListener);
+    return () => window.removeEventListener('print-orders', handlePrintOrders as unknown as EventListener);
+  }, []);
+
   // Print handler function
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (ordersToPrint.length === 0) {
       toast.error('No orders selected for printing');
       return;
@@ -50,6 +91,10 @@ export const PrintOrderDialog: React.FC = () => {
 
     if (printRef.current) {
       try {
+        // Try to fetch expanded data for accuracy (items, shipping_address)
+        // If PocketBase SDK is available here, we could refetch; otherwise rely on provided expands.
+        // For now, proceed with existing data in the preview node.
+
         // Use the browser's print functionality
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
@@ -61,16 +106,24 @@ export const PrintOrderDialog: React.FC = () => {
         const printContent = printRef.current.cloneNode(true) as HTMLElement;
         
         // Create a new document in the print window
+        const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+          .map((node) => (node as HTMLElement).outerHTML)
+          .join('\n');
+
         printWindow.document.write(`
           <html>
             <head>
               <title>Karigai Order Slip</title>
+              ${styles}
               <style>
+                @page { size: auto; margin: 0; }
                 @media print {
                   body { margin: 0; padding: 0; }
                   .print-layout { page-break-inside: avoid; }
+                  .page { page-break-after: always; }
                 }
-                body { font-family: system-ui, sans-serif; }
+                html, body { background: #fff; }
+                body { font-family: system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               </style>
             </head>
             <body>

@@ -7,7 +7,7 @@ export NODE_OPTIONS="--max-old-space-size=512"
 # Use production mode to reduce memory usage
 export NODE_ENV=production
 
-echo "==== Starting Konipai CRM build process ===="
+echo "==== Starting Zenthra CRM build process ===="
 
 # Install only production dependencies first
 echo "Installing production dependencies..."

@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { DataTable } from '@/components/ui/data-table';
-import { columns } from '@/components/tables/orders/columns';
 import { useOrders } from '@/hooks/useOrders';
 import { Button } from '@/components/ui/button';
 import { PlusIcon } from 'lucide-react';
 import { CreateOrderDialog } from '@/components/dialogs/CreateOrderDialog';
 import { ViewOrderDialog } from '@/components/dialogs/ViewOrderDialog';
 import { PrintOrderDialog } from '@/components/dialogs/PrintOrderDialog';
+import { OrdersTable } from '@/components/orders/OrdersTable';
 import { Order } from '@/types/schema';
 
 const OrdersPage: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const { orders, isLoading, error, createOrder } = useOrders();
+  const { orders, isLoading, error, createOrder, updateOrder } = useOrders();
 
   const handleViewOrder = (order: Order) => {
     setSelectedOrder(order);
@@ -42,11 +41,13 @@ const OrdersPage: React.FC = () => {
           </Button>
         </div>
 
-        <DataTable
-          columns={columns(handleViewOrder)}
-          data={orders}
+        <OrdersTable
+          orders={orders}
           isLoading={isLoading}
-          searchField="id"
+          onViewOrder={handleViewOrder}
+          onUpdateStatus={(orderId, status) => {
+            updateOrder.mutate({ id: orderId, data: { status } });
+          }}
         />
 
         <CreateOrderDialog

@@ -68,7 +68,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Top navigation */}
         <header className="flex items-center justify-between p-4 bg-card border-b shadow-sm">
-          <h1 className={`text-xl md:text-2xl font-bold text-foreground ${isMobile ? 'ml-10' : ''}`}>Konipai CRM</h1>
+          <h1 className={`text-xl md:text-2xl font-bold text-foreground ${isMobile ? 'ml-10' : ''}`}>Zenthra CRM</h1>
           
           <div className="flex items-center space-x-2 md:space-x-4">
             {/* Theme Toggle */}

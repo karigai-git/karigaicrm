@@ -110,8 +110,10 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('paid');
   const [selectedOrders, setSelectedOrders] = useState<Order[]>([]);
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [showFilters, setShowFilters] = useState(false);
   
   // Handle order selection
   const toggleOrderSelection = (order: Order) => {
@@ -136,20 +138,45 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
 
   // Handle single order print
   const handlePrintSingleOrder = (order: Order) => {
-    setSelectedOrders([order]);
-    // The actual printing is handled by OrderPrintManager
+    // Dispatch a custom event that PrintOrderDialog will listen for
+    window.dispatchEvent(new CustomEvent('print-order', { detail: order }));
   };
   
-  // Filter orders based on search query, status filter, and date range
+  // Handle bulk print of selected orders
+  const handlePrintSelectedOrders = () => {
+    if (selectedOrders.length === 0) return;
+    
+    // Create a custom event with all selected orders
+    const printEvent = new CustomEvent('print-orders', { 
+      detail: { orders: selectedOrders } 
+    });
+    window.dispatchEvent(printEvent);
+  };
+  
+  // Reset all filters
+  const resetFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setPaymentStatusFilter('all');
+    setDateRange({});
+  };
+  
+  // Filter orders based on all filters
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
+    // Filter by search query
+    const matchesSearch = searchQuery === '' || 
       order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (order.customer_name && order.customer_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (order.customer_email && order.customer_email.toLowerCase().includes(searchQuery.toLowerCase()));
+      (order.customer_email && order.customer_email.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (order.customer_phone && order.customer_phone.toLowerCase().includes(searchQuery.toLowerCase()));
     
+    // Filter by status
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     
-    // Date range filtering
+    // Filter by payment status
+    const matchesPaymentStatus = paymentStatusFilter === 'all' || order.payment_status === paymentStatusFilter;
+    
+    // Filter by date range
     let matchesDateRange = true;
     if (dateRange.from) {
       const orderDate = new Date(order.created);
@@ -157,64 +184,154 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       
       if (dateRange.to) {
         // Set the end of day for the to date
-        const endDate = new Date(dateRange.to);
-        endDate.setHours(23, 59, 59, 999);
-        matchesDateRange = matchesDateRange && orderDate <= endDate;
+        const toDateEnd = new Date(dateRange.to);
+        toDateEnd.setHours(23, 59, 59, 999);
+        matchesDateRange = matchesDateRange && orderDate <= toDateEnd;
       }
     }
     
-    return matchesSearch && matchesStatus && matchesDateRange;
+    return matchesSearch && matchesStatus && matchesPaymentStatus && matchesDateRange;
   });
 
   return (
     <div className="space-y-4">
-      {/* Filters and Actions */}
-      <div className="flex flex-col sm:flex-row gap-4 items-end">
-        <div className="relative flex-1">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-          <Input
-            placeholder="Search orders, customers or emails..."
-            className="pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      <div className="flex flex-col gap-4">
+        {/* Search and primary filters row */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 flex-1">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <Input
+                placeholder="Search orders..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowFilters(!showFilters)}
+              className="whitespace-nowrap"
+            >
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </Button>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {paymentStatusFilter === 'paid' ? (
+              <Button
+                variant="outline"
+                onClick={() => setPaymentStatusFilter('all')}
+                className="whitespace-nowrap"
+              >
+                Show All
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setPaymentStatusFilter('paid')}
+                className="whitespace-nowrap"
+              >
+                Show Paid Only
+              </Button>
+            )}
+            {selectedOrders.length > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={handlePrintSelectedOrders}
+                className="whitespace-nowrap"
+              >
+                <Printer size={16} className="mr-2" />
+                Print {selectedOrders.length} Selected
+              </Button>
+            )}
+            {onRefresh && (
+              <Button variant="outline" onClick={onRefresh}>
+                Refresh
+              </Button>
+            )}
+          </div>
         </div>
         
-        <div className="flex flex-wrap gap-2 items-center">
-          <DateRangePicker
-            value={dateRange}
-            onChange={setDateRange}
-            className="w-full sm:w-auto"
-            placeholder="Filter by date"
-          />
-          
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-[150px]">
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="processing">Processing</SelectItem>
-              <SelectItem value="shipped">Shipped</SelectItem>
-              <SelectItem value="delivered">Delivered</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          {/* Print Manager */}
-          <OrderPrintManager 
-            selectedOrders={selectedOrders} 
-            allOrders={filteredOrders} 
-          />
-          
-          {/* Refresh Button */}
-          {onRefresh && (
-            <Button variant="outline" size="sm" onClick={onRefresh}>
-              Refresh
-            </Button>
-          )}
-        </div>
+        {/* Advanced filters section */}
+        {showFilters && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border rounded-md bg-gray-50">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Order Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="shipped">Shipped</SelectItem>
+                  <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="out_for_delivery">Out for Delivery</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-1 block">Payment Status</label>
+              <Select value={paymentStatusFilter} onValueChange={setPaymentStatusFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Filter by payment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Payment Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="refunded">Refunded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium mb-1 block">Date Range</label>
+              <DateRangePicker 
+                date={dateRange} 
+                onDateChange={setDateRange} 
+              />
+            </div>
+            
+            <div className="flex items-end">
+              <Button 
+                variant="secondary" 
+                onClick={resetFilters} 
+                className="w-full"
+              >
+                Reset Filters
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Filter summary */}
+        {(statusFilter !== 'all' || paymentStatusFilter !== 'all' || dateRange.from) && (
+          <div className="flex flex-wrap gap-2 text-sm">
+            <span className="font-medium">Active filters:</span>
+            {statusFilter !== 'all' && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Status: {statusFilter}
+              </Badge>
+            )}
+            {paymentStatusFilter !== 'all' && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Payment: {paymentStatusFilter}
+              </Badge>
+            )}
+            {dateRange.from && (
+              <Badge variant="secondary" className="flex items-center gap-1">
+                Date: {format(dateRange.from, 'dd MMM yyyy')}
+                {dateRange.to && ` - ${format(dateRange.to, 'dd MMM yyyy')}`}
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
       
       {/* Selected Orders Info */}

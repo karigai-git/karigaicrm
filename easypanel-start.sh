@@ -1,5 +1,5 @@
 #!/bin/sh
-# Easypanel start script for Konipai CRM
+# Easypanel start script for Zenthra CRM
 
 # Start the backend server
 node dist-server/server/index.js &

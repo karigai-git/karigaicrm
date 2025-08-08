@@ -178,22 +178,21 @@ export const getDashboardMetrics = async () => {
       sort: '-created',
     });
     
-    // Calculate the metrics
-    const totalOrders = ordersResult.length;
-    
-    const pendingOrders = ordersResult.filter(
-      order => order.status === 'pending' || order.status === 'processing'
-    ).length;
-    
-    const completedOrders = ordersResult.filter(
-      order => order.status === 'delivered'
-    ).length;
-    
-    // Calculate revenue metrics
-    const totalRevenue = ordersResult.reduce((sum, order) => sum + (order.total || 0), 0);
-    
-    const averageOrderValue = totalOrders > 0 
-      ? totalRevenue / totalOrders 
+    // Calculate the metrics using ONLY paid orders
+    const paidOrders = ordersResult.filter(order => order.payment_status === 'paid');
+    const totalOrders = paidOrders.length;
+
+    // Pending = orders that are NOT paid
+    const pendingOrders = ordersResult.filter(order => order.payment_status !== 'paid').length;
+
+    // Completed orders by delivery status (unchanged)
+    const completedOrders = ordersResult.filter(order => order.status === 'delivered').length;
+
+    // Revenue metrics from PAID orders only
+    const totalRevenue = paidOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+
+    const averageOrderValue = totalOrders > 0
+      ? totalRevenue / totalOrders
       : 0;
     
     // Calculate today's revenue
@@ -203,7 +202,7 @@ export const getDashboardMetrics = async () => {
     const revenueToday = ordersResult
       .filter(order => {
         const orderDate = new Date(order.created);
-        return orderDate >= today;
+        return orderDate >= today && order.payment_status === 'paid';
       })
       .reduce((sum, order) => sum + (order.total || 0), 0);
     

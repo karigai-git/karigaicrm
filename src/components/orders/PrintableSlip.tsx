@@ -44,18 +44,108 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
 
   const groupedOrders = layout === 1 ? [[...orders]] : groupOrdersByPage();
   
+  // Resolve order items with multiple fallbacks
+  const resolveItems = (order: any) => {
+    const rows: Array<{ name: string; quantity: number; price: number; total: number }> = [];
+    const pushRow = (name: any, quantity: any, price: any, total?: any) => {
+      const q = Number(quantity) || 1;
+      const p = Number(price) || 0;
+      const t = total != null ? Number(total) : q * p;
+      rows.push({ name: String(name || 'Item'), quantity: q, price: p, total: t });
+    };
+    
+    // 1) Expanded items from PocketBase
+    if (Array.isArray(order?.expand?.items) && order.expand.items.length > 0) {
+      order.expand.items.forEach((it: any) => {
+        const name = it?.name || it?.expand?.product_id?.name || it?.product_name || 'Item';
+        pushRow(name, it?.quantity, it?.price, it?.total);
+      });
+      return rows;
+    }
+
+    // 2) Direct items array on the record, if any
+    if (Array.isArray(order?.items) && order.items.length > 0) {
+      order.items.forEach((it: any) => {
+        const name = it?.name || it?.expand?.product_id?.name || it?.product_name || 'Item';
+        pushRow(name, it?.quantity, it?.price, it?.total);
+      });
+      return rows;
+    }
+
+    // 3) Handle 'products' when it's already an array
+    if (Array.isArray(order?.products) && order.products.length > 0) {
+      order.products.forEach((it: any) => {
+        const name = it?.name || it?.product?.name || it?.title || 'Item';
+        const qty = it?.quantity ?? it?.qty ?? 1;
+        // Prefer explicit item.price, else fall back to product.price/original_price
+        const price = it?.price ?? it?.unitPrice ?? it?.product?.price ?? it?.product?.original_price ?? 0;
+        pushRow(name, qty, price, it?.total);
+      });
+      return rows;
+    }
+
+    // 4) Try to parse 'products' field which might be JSON or summary string
+    const prod = order?.products;
+    if (typeof prod === 'string' && prod.trim()) {
+      const t = prod.trim();
+      // JSON array case
+      if ((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))) {
+        try {
+          const parsed = JSON.parse(t);
+          const arr = Array.isArray(parsed) ? parsed : [parsed];
+          arr.forEach((it: any) => {
+            const name = it?.name || it?.title || it?.product || 'Item';
+            const qty = it?.quantity ?? it?.qty ?? 1;
+            const price = it?.price ?? it?.unitPrice ?? 0;
+            pushRow(name, qty, price, it?.total);
+          });
+          if (rows.length > 0) return rows;
+        } catch {
+          // ignore and fall through
+        }
+      }
+      // Fallback: comma-separated summary string -> single line
+      pushRow(t, 1, order?.subtotal || 0, order?.subtotal || 0);
+      return rows;
+    }
+
+    return rows; // possibly empty
+  };
+  
   return (
     <div ref={ref} className="printable-area">
       {groupedOrders.map((pageOrders, pageIndex) => (
-        <div key={pageIndex} className={`${getGridStyles()} page break-after-page mb-10 p-2 sm:p-4 print:p-4`}>
+        <div key={pageIndex} className={`${getGridStyles()} page break-after-page mb-0 p-0 print:p-0`}>
           {pageOrders.map((order) => {
             // Extract shipping address from order
             const address = order.expand?.shipping_address;
             const customerName = address ? address.name : order.customer_name || '';
             const customerPhone = address ? address.phone : order.customer_phone || '';
-            const addressText = address ? 
-              `${address.street}, ${address.city}, ${address.state} ${address.postal_code}` : 
-              order.shipping_address || '';
+            const rawAddress = address
+              ? `${address.street || ''}${address.street ? ', ' : ''}${address.city || ''}${address.city ? ', ' : ''}${address.state || ''} ${address.postal_code || ''}`.trim()
+              : (order.shipping_address_text || order.shipping_address || '').toString();
+
+            // Parse JSON address text if applicable
+            const formatAddressLines = (txt: string): string[] => {
+              const safe = (s: any) => (typeof s === 'string' ? s : s?.toString?.() || '');
+              if (!txt) return [];
+              const t = txt.trim();
+              if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+                try {
+                  const obj = JSON.parse(t);
+                  if (Array.isArray(obj)) return obj.map((x) => safe(x)).filter(Boolean);
+                  const line1 = [safe(obj.street), safe(obj.area), safe(obj.landmark)].filter(Boolean).join(', ');
+                  const line2 = [safe(obj.city), safe(obj.state)].filter(Boolean).join(', ');
+                  const line3 = [safe(obj.postalCode) || safe(obj.pincode), safe(obj.country)].filter(Boolean).join(' ');
+                  return [line1, line2, line3].filter(Boolean);
+                } catch {
+                  // fallback to as-is string
+                  return [txt];
+                }
+              }
+              return [txt];
+            };
+            const addressLines = formatAddressLines(rawAddress);
             
             // Generate tracking number
             const trackingNumber = order.tracking_number || order.id.slice(0, 8);
@@ -86,7 +176,9 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
                     <p className="font-bold text-xs md:text-sm">TO:</p>
                     <div className="pl-2">
                       <p className="text-xs md:text-sm font-bold">{customerName}</p>
-                      <p className="text-xs md:text-sm leading-tight">{addressText}</p>
+                      {addressLines.map((line, idx) => (
+                        <p key={idx} className="text-xs md:text-sm leading-tight break-words">{line}</p>
+                      ))}
                       <p className="text-xs md:text-sm">Phone: {customerPhone}</p>
                     </div>
                   </div>
@@ -95,29 +187,20 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
                   <div className="border-t border-b border-dashed py-1 my-1">
                     <table className="w-full text-xs md:text-sm">
                       <tbody>
-                        {/* Display order items */}
-                        {order.expand?.items?.map((item: any, index: number) => {
-                          const productName = item.expand?.product_id?.name || item.product_name || 'Product';
-                          const quantity = item.quantity || 1;
-                          const price = item.price || 0;
-                          const total = quantity * price;
-                          
-                          return (
-                            <React.Fragment key={index}>
-                              <tr>
-                                <td className="py-0.5 md:py-1">{productName}</td>
-                                <td className="py-0.5 md:py-1 text-right">{quantity} x ₹{price.toFixed(2)}</td>
-                              </tr>
-                              <tr className="border-b border-dotted">
-                                <td></td>
-                                <td className="py-0.5 md:py-1 text-right font-bold">₹{total.toFixed(2)}</td>
-                              </tr>
-                            </React.Fragment>
-                          );
-                        })}
-                        
-                        {/* If no items are expanded, show a placeholder */}
-                        {(!order.expand?.items || order.expand.items.length === 0) && (
+                        {resolveItems(order).map((row, index) => (
+                          <React.Fragment key={index}>
+                            <tr>
+                              <td className="py-0.5 md:py-1">{row.name}</td>
+                              <td className="py-0.5 md:py-1 text-right">{row.quantity} x ₹{row.price.toFixed(2)}</td>
+                            </tr>
+                            <tr className="border-b border-dotted">
+                              <td></td>
+                              <td className="py-0.5 md:py-1 text-right font-bold">₹{row.total.toFixed(2)}</td>
+                            </tr>
+                          </React.Fragment>
+                        ))}
+
+                        {resolveItems(order).length === 0 && (
                           <tr>
                             <td colSpan={2} className="text-center py-1 text-gray-500">Order items not available</td>
                           </tr>

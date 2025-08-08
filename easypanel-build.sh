@@ -1,5 +1,5 @@
 #!/bin/sh
-# Easypanel build script for Konipai CRM
+# Easypanel build script for Zenthra CRM
 
 # Set memory limit for Node to prevent OOM issues
 export NODE_OPTIONS="--max-old-space-size=512"

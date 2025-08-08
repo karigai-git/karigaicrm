@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -24,6 +24,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEmailActivities } from '@/hooks/useEmailActivities';
 import { EmailActivities } from '@/components/orders/EmailActivities';
 import { SendEmailMessage } from '@/components/orders/SendEmailMessage';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useOrders } from '@/hooks/useOrders';
+import { getImageUrl as pbGetImageUrl } from '@/lib/pocketbase';
 
 type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'success' | 'warning';
 
@@ -49,6 +60,7 @@ interface ProductItem {
 
 export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogProps) {
   const queryClient = useQueryClient();
+  const { updateOrder } = useOrders();
 
   const orderStatusVariant: Record<string, BadgeVariant> = {
     pending: 'warning',
@@ -59,7 +71,94 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
     cancelled: 'destructive'
   };
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [form, setForm] = useState({
+    customer_name: '',
+    customer_email: '',
+    customer_phone: '',
+    shipping_address_text: '',
+    notes: '',
+    status: 'pending',
+    payment_status: 'pending',
+  });
+
+  useEffect(() => {
+    if (order) {
+      setForm({
+        customer_name: order.customer_name || '',
+        customer_email: order.customer_email || '',
+        customer_phone: order.customer_phone || '',
+        shipping_address_text: order.shipping_address_text || '',
+        notes: order.notes || '',
+        status: order.status || 'pending',
+        payment_status: order.payment_status || 'pending',
+      });
+    }
+  }, [order]);
+
   if (!order) return null;
+
+  const handleSave = () => {
+    updateOrder.mutate({
+      id: order.id,
+      data: {
+        customer_name: form.customer_name,
+        customer_email: form.customer_email,
+        customer_phone: form.customer_phone,
+        shipping_address_text: form.shipping_address_text,
+        notes: form.notes,
+        status: form.status as any,
+        payment_status: form.payment_status as any,
+      },
+    });
+    setIsEditing(false);
+  };
+
+  // Format shipping address from either plain text or JSON
+  const formatShippingAddress = (): string => {
+    try {
+      // Prefer plain text if it doesn't look like JSON
+      const txt = (order.shipping_address_text || '').trim();
+      if (txt && !(txt.startsWith('{') && txt.endsWith('}'))) return txt;
+
+      // Try shipping_address object/string
+      const raw = (order as any).shipping_address as unknown;
+      let obj: any = null;
+
+      if (raw && typeof raw === 'object') obj = raw;
+      else if (typeof raw === 'string' && raw.trim()) obj = JSON.parse(raw);
+      else if (txt) {
+        // shipping_address_text might actually contain JSON
+        try { obj = JSON.parse(txt); } catch {}
+      }
+
+      if (!obj) return txt || 'No address provided';
+
+      const parts: string[] = [];
+      const line1 = [obj.street, obj.address1, obj.address_line1].find(Boolean);
+      const line2 = [obj.address2, obj.address_line2, obj.area, obj.locality, obj.landmark].filter(Boolean).join(', ');
+      const city = obj.city || obj.district;
+      const state = obj.state;
+      const pin = obj.postalCode || obj.postal_code || obj.zip || obj.pincode;
+      const country = obj.country;
+      const name = obj.name || obj.recipient;
+      const phone = obj.phone || obj.mobile;
+
+      if (name) parts.push(String(name));
+      if (line1) parts.push(String(line1));
+      if (line2) parts.push(String(line2));
+      const cityState = [city, state].filter(Boolean).join(', ');
+      if (cityState) parts.push(cityState);
+      if (pin) parts.push(String(pin));
+      if (country) parts.push(String(country));
+      if (phone) parts.push(`Phone: ${phone}`);
+
+      return parts.filter(Boolean).join('\n');
+    } catch (e) {
+      console.error('Failed to format shipping address', e);
+      return order.shipping_address_text || 'No address provided';
+    }
+  };
 
   // Handle products data - could be a string, object, or array
   let products: ProductItem[] = [];
@@ -109,108 +208,147 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
     }
   };
 
-  // Format image URL for PocketBase
-  const getImageUrl = (imagePath: string) => {
-    console.log('Image path received:', imagePath);
-    
-    if (!imagePath) {
-      console.log('No image path provided, using placeholder');
-      return 'https://placehold.co/200x200/e2e8f0/64748b?text=No+Image';
+  // Helper to build product image URL consistently with Products page
+  const productImageUrl = (record: any, fileName?: string) => {
+    const placeholder = 'https://placehold.co/200x200/e2e8f0/64748b?text=No+Image';
+    if (!fileName) return placeholder;
+    const cid = record?.collectionId || record?.collection || 'products';
+    const rid = record?.id;
+    if (cid && rid) return pbGetImageUrl(cid, rid, fileName);
+    if (fileName.startsWith('http')) return fileName;
+    // Fallback if filename accidentally contains "recordId/filename"
+    if (typeof fileName === 'string' && fileName.includes('/')) {
+      return `${import.meta.env.VITE_POCKETBASE_URL}/api/files/${cid || ''}/${fileName}`;
     }
-    
-    // Check if the image path is already a full URL
-    if (imagePath.startsWith('http')) {
-      console.log('Image path is already a full URL');
-      return imagePath;
-    }
-    
-    // For the format in the screenshot: "2yqo7r8y2o2xs02/koni_dh5t663hoc.9552_73228474847.jpg"
+    return placeholder;
+  };
+
+  // Resolve a product's primary image filename similar to Products page
+  const resolveProductImageFileName = (p: any): string | undefined => {
     try {
-      // Use the exact URL format from the example
-      const fullUrl = `https://backend-pocketbase.7za6uc.easypanel.host/api/files/pbc_4092854851/${imagePath}`;
-      console.log('Generated image URL:', fullUrl);
-      return fullUrl;
-    } catch (e) {
-      console.error('Error formatting image URL:', e);
-      return 'https://placehold.co/200x200/e2e8f0/64748b?text=No+Image';
+      if (!p) return undefined;
+      if (Array.isArray(p.images) && p.images.length > 0) return p.images[0];
+      if (typeof p.images === 'string' && p.images) return p.images as string;
+      if (typeof (p as any).image === 'string' && (p as any).image) return (p as any).image as string;
+      return undefined;
+    } catch {
+      return undefined;
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <div className="flex justify-between items-center">
+      <DialogContent className="w-full h-dvh max-w-full sm:max-w-3xl sm:h-[90vh] sm:rounded-lg sm:mx-auto rounded-none box-border overflow-hidden overflow-x-hidden flex flex-col p-0 sm:p-6">
+        <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b px-4 py-3 sm:px-0 sm:py-0">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <DialogTitle className="text-xl flex items-center gap-2">
-                Order #{order.id}
-                <Badge variant={orderStatusVariant[order.status] || 'outline'}>
-                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+              <DialogTitle>
+                Order <span className="text-muted-foreground">#{order.id.slice(0, 8)}</span>
+                <Badge variant={orderStatusVariant[form.status] || 'outline'} className="ml-2">
+                  {form.status.replace(/_/g, ' ')}
                 </Badge>
               </DialogTitle>
               <DialogDescription>
                 Created on {safeFormatDate(order.created)}
               </DialogDescription>
             </div>
-            <Badge variant={paymentStatusVariant[order.payment_status] || 'outline'} className="px-3 py-1">
-              Payment: {order.payment_status.charAt(0).toUpperCase() + order.payment_status.slice(1)}
-            </Badge>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <Badge variant={paymentStatusVariant[form.payment_status] || 'outline'} className="px-3 py-1 text-xs">
+                Payment: {form.payment_status.charAt(0).toUpperCase() + form.payment_status.slice(1)}
+              </Badge>
+              {!isEditing ? (
+                <Button variant="outline" className="h-8 px-3 text-sm" onClick={() => setIsEditing(true)}>Edit</Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" className="h-8 px-3 text-sm" onClick={() => { setIsEditing(false); setForm({
+                    customer_name: order.customer_name || '',
+                    customer_email: order.customer_email || '',
+                    customer_phone: order.customer_phone || '',
+                    shipping_address_text: order.shipping_address_text || '',
+                    notes: order.notes || '',
+                    status: order.status || 'pending',
+                    payment_status: order.payment_status || 'pending',
+                  }); }}>Cancel</Button>
+                  <Button className="h-8 px-3 text-sm" onClick={handleSave}>Save</Button>
+                </div>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
         <Tabs defaultValue="details" className="flex-1 overflow-hidden flex flex-col">
-          <TabsList className="grid grid-cols-5 mb-4">
-            <TabsTrigger value="details">Order Details</TabsTrigger>
-            <TabsTrigger value="products">Products</TabsTrigger>
-            <TabsTrigger value="payment">Payment Info</TabsTrigger>
-            <TabsTrigger value="whatsapp" className="flex items-center gap-1">
+          <TabsList className="mb-3 px-3 sm:px-0 flex flex-wrap gap-2">
+            <TabsTrigger value="details" className="text-sm">Order Details</TabsTrigger>
+            <TabsTrigger value="products" className="text-sm">Products</TabsTrigger>
+            <TabsTrigger value="payment" className="text-sm">Payment Info</TabsTrigger>
+            <TabsTrigger value="whatsapp" className="flex items-center gap-1 text-sm">
               <MessageSquare className="h-4 w-4" />
               WhatsApp
             </TabsTrigger>
-            <TabsTrigger value="email" className="flex items-center gap-1">
+            <TabsTrigger value="email" className="flex items-center gap-1 text-sm">
               <Mail className="h-4 w-4" />
               Email
             </TabsTrigger>
           </TabsList>
 
-          <ScrollArea className="h-[70vh] pr-4">
-            <TabsContent value="details" className="space-y-4 p-1">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <ScrollArea className="sm:flex-1 pr-0 sm:pr-4 overflow-visible sm:overflow-auto">
+            <TabsContent value="details" className="space-y-3 sm:space-y-4 p-3 sm:p-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
                     <CardTitle className="text-lg">Customer Information</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-2">
+                  <CardContent className="space-y-2 px-4 pb-4 sm:px-6">
                     <div>
                       <Label className="font-semibold">Name</Label>
-                      <p>{order.customer_name}</p>
+                      {isEditing ? (
+                        <Input value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
+                      ) : (
+                        <p>{form.customer_name}</p>
+                      )}
                     </div>
                     <div>
                       <Label className="font-semibold">Email</Label>
-                      <p>{order.customer_email}</p>
+                      {isEditing ? (
+                        <Input type="email" value={form.customer_email} onChange={(e) => setForm({ ...form, customer_email: e.target.value })} />
+                      ) : (
+                        <p className="break-words">{form.customer_email}</p>
+                      )}
                     </div>
                     <div>
                       <Label className="font-semibold">Phone</Label>
-                      <p>{order.customer_phone || 'Not provided'}</p>
+                      {isEditing ? (
+                        <Input value={form.customer_phone} onChange={(e) => setForm({ ...form, customer_phone: e.target.value })} />
+                      ) : (
+                        <p className="break-words">{form.customer_phone || 'Not provided'}</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
 
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
                     <CardTitle className="text-lg">Shipping Address</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="whitespace-pre-line">{order.shipping_address_text || 'No address provided'}</p>
+                  <CardContent className="px-4 pb-4 sm:px-6">
+                    {isEditing ? (
+                      <Textarea rows={6} value={form.shipping_address_text} onChange={(e) => setForm({ ...form, shipping_address_text: e.target.value })} />
+                    ) : (
+                      <p className="whitespace-pre-line break-words">{formatShippingAddress()}</p>
+                    )}
                   </CardContent>
                 </Card>
 
                 <Card className="md:col-span-2">
-                  <CardHeader>
+                  <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
                     <CardTitle className="text-lg">Order Notes</CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <p className="whitespace-pre-line">{order.notes || 'No notes provided'}</p>
+                  <CardContent className="px-4 pb-4 sm:px-6">
+                    {isEditing ? (
+                      <Textarea rows={4} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                    ) : (
+                      <p className="whitespace-pre-line break-words">{form.notes || 'No notes provided'}</p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -226,7 +364,7 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                     <div className="space-y-6">
                       {products.map((product, index) => (
                         <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 border-b pb-4">
-                          <div className="md:col-span-1">
+                          <div className="md:col-span-1 hidden sm:block">
                             {product.product?.images && Array.isArray(product.product.images) && product.product.images.length > 0 ? (
                               <div className="w-full max-w-[150px] mx-auto">
                                 {(() => { 
@@ -236,7 +374,7 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                                 })()}
                                 <AspectRatio ratio={1 / 1} className="bg-muted rounded-md overflow-hidden">
                                   <img 
-                                    src={getImageUrl(product.product.images[0])}
+                                    src={productImageUrl(product.product, resolveProductImageFileName(product.product))}
                                     alt={product.product.name}
                                     className="object-cover w-full h-full"
                                     onError={(e) => {
