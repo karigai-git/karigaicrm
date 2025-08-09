@@ -33,6 +33,7 @@ export const SendWhatsAppMessage: React.FC<SendWhatsAppMessageProps> = ({ order,
   const [messageType, setMessageType] = useState<'text' | 'media'>('text');
   const [mediaUrl, setMediaUrl] = useState('');
   const [caption, setCaption] = useState('');
+  const [mediaType, setMediaType] = useState<'image' | 'video' | 'audio' | 'document'>('image');
 
   // Connection state - bypassing connection check
   const [connectionStatus, setConnectionStatus] = useState<string | null>('open'); // Force connected state
@@ -107,8 +108,8 @@ export const SendWhatsAppMessage: React.FC<SendWhatsAppMessageProps> = ({ order,
           phone: order.customer_phone,
           mediaUrl,
           caption,
-          mediaType: 'image',
-          fileName: `product-${order.id}.jpg`,
+          mediaType,
+          fileName: mediaType === 'document' ? `document-${order.id}.pdf` : `media-${order.id}`,
           orderId: order.id,
         });
       }
@@ -224,6 +225,20 @@ export const SendWhatsAppMessage: React.FC<SendWhatsAppMessageProps> = ({ order,
         ) : (
           <div className="space-y-4">
             <div className="space-y-1">
+              <Label htmlFor="media-type">Media Type</Label>
+              <Select value={mediaType} onValueChange={(v) => setMediaType(v as any)}>
+                <SelectTrigger id="media-type">
+                  <SelectValue placeholder="Select media type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="image">Image</SelectItem>
+                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="audio">Audio</SelectItem>
+                  <SelectItem value="document">Document</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="media-url">Media URL</Label>
               <Input
                 id="media-url"
@@ -232,7 +247,7 @@ export const SendWhatsAppMessage: React.FC<SendWhatsAppMessageProps> = ({ order,
                 onChange={(e) => setMediaUrl(e.target.value)}
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Enter a publicly accessible URL to an image (JPG, PNG, etc.)
+                Enter a publicly accessible URL to: image/video/audio/document depending on selected type
               </p>
             </div>
 
@@ -247,7 +262,7 @@ export const SendWhatsAppMessage: React.FC<SendWhatsAppMessageProps> = ({ order,
               />
             </div>
 
-            {mediaUrl && (
+            {mediaUrl && mediaType === 'image' && (
               <div className="border rounded-md p-2 bg-muted/50">
                 <p className="text-xs font-medium mb-1">Image Preview:</p>
                 <div className="aspect-video bg-muted flex items-center justify-center overflow-hidden rounded-md">

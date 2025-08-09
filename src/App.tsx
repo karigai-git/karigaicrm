@@ -16,6 +16,7 @@ import EmailActivitiesPage from "./pages/admin/EmailActivitiesPage";
 import EmailTemplatesPage from "./pages/admin/EmailTemplatesPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
+import CampaignsPage from "./pages/admin/CampaignsPage";
 
 // Set PocketBase URL from environment variable
 if (import.meta.env.VITE_POCKETBASE_URL) {
@@ -58,6 +59,7 @@ const App = () => (
             <Route path="/admin/whatsapp-templates" element={<WhatsAppTemplatesPage />} />
             <Route path="/admin/email" element={<EmailActivitiesPage />} />
             <Route path="/admin/email-templates" element={<EmailTemplatesPage />} />
+            <Route path="/admin/campaigns" element={<CampaignsPage />} />
             
             {/* Catch-all route */}
             <Route path="*" element={<NotFound />} />

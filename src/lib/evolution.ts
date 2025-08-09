@@ -13,11 +13,46 @@ export interface SendMediaMessageRequest {
   fileName?: string;
   orderId?: string;
 }
+// Backend URL discovery
+// 1) Use VITE_SERVER_URL if provided
+// 2) Otherwise probe common ports (server writes its chosen port via port fallback)
+const ENV_SERVER_URL = (import.meta as any)?.env?.VITE_SERVER_URL as string | undefined;
+const ENV_SERVER_PORT = Number((import.meta as any)?.env?.VITE_SERVER_PORT) || 3001;
+const CANDIDATE_PORTS = [ENV_SERVER_PORT, 3002, 3003, 4001, 4002, 4003];
 
-// Explicitly use localhost:3001 for the backend to avoid CORS issues
-const SERVER_URL = 'http://localhost:3001';
+let RESOLVED_SERVER_URL: string | null = ENV_SERVER_URL || null;
 
-console.log('Using backend proxy URL:', SERVER_URL);
+const fetchWithTimeout = async (url: string, ms = 1200) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: controller.signal, headers: { 'cache-control': 'no-cache' } });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+};
+
+const resolveServerUrl = async (): Promise<string> => {
+  if (RESOLVED_SERVER_URL) return RESOLVED_SERVER_URL;
+  // Try candidates: http://localhost:<port>
+  for (const port of CANDIDATE_PORTS) {
+    const base = `http://localhost:${port}`;
+    try {
+      const res = await fetchWithTimeout(`${base}/health`, 1000);
+      if (res.ok) {
+        RESOLVED_SERVER_URL = base;
+        console.log('Detected backend URL:', RESOLVED_SERVER_URL);
+        return base;
+      }
+    } catch {
+      // try next
+    }
+  }
+  // Last attempt: if vite dev server proxies, allow relative root
+  RESOLVED_SERVER_URL = '';
+  return '';
+};
 
 /**
  * Formats a phone number to ensure it has the 91 country code prefix
@@ -47,13 +82,14 @@ export const sendWhatsAppMessage = async (data: SendMessageRequest) => {
       phone: formattedPhone
     };
     
+    const base = await resolveServerUrl();
     console.log('Sending WhatsApp message via backend proxy:', requestData);
-    console.log('Backend URL:', `${SERVER_URL}/api/evolution/messages`);
+    console.log('Backend URL:', `${base}/api/evolution/messages`);
     
     // Add timestamp for debugging
     console.time('whatsapp-message-request');
     
-    const response = await fetch(`${SERVER_URL}/api/evolution/messages`, {
+    const response = await fetch(`${base}/api/evolution/messages`, {
       method: 'POST',
       body: JSON.stringify(requestData),
       headers: {
@@ -93,13 +129,14 @@ export const sendWhatsAppMediaMessage = async (data: SendMediaMessageRequest) =>
       phone: formattedPhone
     };
     
+    const base = await resolveServerUrl();
     console.log('Sending WhatsApp media message via backend proxy:', requestData);
-    console.log('Backend URL:', `${SERVER_URL}/api/evolution/media`);
+    console.log('Backend URL:', `${base}/api/evolution/media`);
     
     // Add timestamp for debugging
     console.time('whatsapp-media-request');
     
-    const response = await fetch(`${SERVER_URL}/api/evolution/media`, {
+    const response = await fetch(`${base}/api/evolution/media`, {
       method: 'POST',
       body: JSON.stringify(requestData),
       headers: {
@@ -125,7 +162,8 @@ export const sendWhatsAppMediaMessage = async (data: SendMediaMessageRequest) =>
 export const getInstanceConnectionState = async (instanceName: string) => {
   try {
     console.log(`Fetching connection state for instance: ${instanceName}`);
-    const response = await fetch(`${SERVER_URL}/api/evolution/instance/connection/${instanceName}`);
+    const base = await resolveServerUrl();
+    const response = await fetch(`${base}/api/evolution/instance/connection/${instanceName}`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch connection state: ${response.status} ${response.statusText}`);
@@ -142,7 +180,8 @@ export const getInstanceConnectionState = async (instanceName: string) => {
 export const connectInstance = async (instanceName: string) => {
   try {
     console.log(`Connecting instance: ${instanceName}`);
-    const response = await fetch(`${SERVER_URL}/api/evolution/instance/connect/${instanceName}`);
+    const base = await resolveServerUrl();
+    const response = await fetch(`${base}/api/evolution/instance/connect/${instanceName}`);
     
     if (!response.ok) {
       const errorText = await response.text();

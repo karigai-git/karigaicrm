@@ -16,7 +16,7 @@ export function getWhatsAppApiUrl(): string {
 const EVOLUTION_API_URL = getWhatsAppApiUrl();
 
 // Default instance name for Evolution API
-const DEFAULT_INSTANCE = 'Konipai';
+const DEFAULT_INSTANCE = (import.meta.env.VITE_EVOLUTION_INSTANCE || 'konipai').trim();
 
 // API key for Evolution API authentication
 const EVOLUTION_API_KEY = import.meta.env.VITE_EVOLUTION_API_KEY || 'your-api-key-here';
@@ -75,7 +75,13 @@ function getEvolutionEndpoint(path: string, instance: string = DEFAULT_INSTANCE)
   }
   
   // Return the full endpoint URL
-  return `${apiUrl}${path}`;
+  const full = `${apiUrl}${path}`;
+  // Centralized debug logging for resolved endpoint and instance
+  try {
+    // eslint-disable-next-line no-console
+    console.debug('Evolution endpoint resolved', { instance, endpoint: full });
+  } catch {}
+  return full;
 }
 
 /**
@@ -157,6 +163,58 @@ export async function sendWhatsAppTextMessage(
       success: false,
       message: errorMessage
     };
+  }
+}
+
+// ===== Unified config-based sender (aligns with MessageSender.tsx) =====
+export type MessageData = {
+  type: 'text' | 'media';
+  text?: string;
+  mediatype?: 'image' | 'video' | 'audio' | 'document';
+  mediaUrl?: string;
+  caption?: string;
+  filename?: string;
+  variables?: Record<string, string>;
+};
+
+/**
+ * Send a WhatsApp message using a unified configuration
+ * @param to recipient phone
+ * @param data message configuration (text or media)
+ */
+export async function sendConfiguredWhatsAppMessage(to: string, data: MessageData): Promise<WhatsAppApiResponse> {
+  if (data.type === 'text') {
+    const message = data.text?.trim();
+    if (!message) {
+      return { success: false, message: 'Text message is empty' };
+    }
+    return sendWhatsAppTextMessage(to, message, data.variables);
+  }
+
+  // Media branch
+  const mediaType = data.mediatype || 'image';
+  const mediaUrl = (data.mediaUrl || '').trim();
+  if (!mediaUrl) {
+    return { success: false, message: 'Media URL is required' };
+  }
+
+  const caption = data.caption;
+  switch (mediaType) {
+    case 'image':
+      return sendWhatsAppImageMessage(to, mediaUrl, caption, data.variables);
+    case 'video':
+      return sendWhatsAppVideoMessage(to, mediaUrl, caption, data.variables);
+    case 'document': {
+      const filename = data.filename || 'document.pdf';
+      return sendWhatsAppDocumentMessage(to, mediaUrl, filename, caption, data.variables);
+    }
+    case 'audio': {
+      // Evolution specific audio endpoint may vary; fallback to document send with .mp3
+      const filename = data.filename || 'audio.mp3';
+      return sendWhatsAppDocumentMessage(to, mediaUrl, filename, caption, data.variables);
+    }
+    default:
+      return { success: false, message: `Unsupported media type: ${mediaType}` };
   }
 }
 
@@ -1267,9 +1325,9 @@ export async function checkWhatsAppConnection(): Promise<{
 }> {
   try {
     // Get Evolution API configuration
-    const apiUrl = import.meta.env.VITE_WHATSAPP_API_URL || 'https://crm-evolution-api.7za6uc.easypanel.host/';
-    const apiKey = import.meta.env.VITE_EVOLUTION_API_KEY || '2DE05041EDA5-4A20-BAA6-4B600A785762';
-    const instance = import.meta.env.VITE_EVOLUTION_INSTANCE || 'konipai';
+    const apiUrl = getWhatsAppApiUrl();
+    const apiKey = EVOLUTION_API_KEY;
+    const instance = DEFAULT_INSTANCE;
     
     // Simple detection of environment
     const isProduction = window.location.hostname.includes('easypanel.host');

@@ -44,6 +44,7 @@ router.post('/messages', async (req, res) => {
           'Content-Type': 'application/json',
           'apikey': EVOLUTION_API_KEY,
         },
+        timeout: 15000,
       }
     );
 
@@ -68,8 +69,14 @@ router.post('/messages', async (req, res) => {
     }
 
     res.status(200).json(response.data);
-  } catch (error) {
-    console.error('Error sending message via Evolution API:', error);
+  } catch (error: any) {
+    const status = error?.response?.status || error?.output?.statusCode || 500;
+    const payload = error?.response?.data || error?.output?.payload || { error: 'Failed to send message' };
+    console.error('Error sending message via Evolution API:', {
+      status,
+      payload,
+      message: error?.message,
+    });
     
     // Record the failed message attempt
     try {
@@ -91,7 +98,11 @@ router.post('/messages', async (req, res) => {
       // Continue with the error response even if activity recording fails
     }
     
-    res.status(500).json({ error: 'Failed to send message' });
+    // Map Evolution timeout (often means instance disconnected or number check timed out)
+    if (status === 408) {
+      return res.status(408).json({ error: 'Evolution API timed out. Instance may be disconnected or unreachable.' });
+    }
+    res.status(status).json(typeof payload === 'object' ? payload : { error: String(payload) });
   }
 });
 
@@ -119,11 +130,10 @@ router.post('/media', async (req, res) => {
       {
         number: phone,
         options: {
-          delay: 1200,
-          presence: 'composing'
-        },
-        mediaMessage: {
-          mediaType: mediaType || 'image',
+          // Evolution expects media options here
+          // See: https://evolution-api.com/docs/message/sendMedia
+          // We pass caption and filename as part of options
+          mimetype: mediaType || 'image/jpeg',
           fileName: fileName || 'product-image.jpg',
           caption: caption || '',
           media: mediaUrl
@@ -134,6 +144,7 @@ router.post('/media', async (req, res) => {
           'Content-Type': 'application/json',
           'apikey': EVOLUTION_API_KEY,
         },
+        timeout: 20000,
       }
     );
 
@@ -159,8 +170,14 @@ router.post('/media', async (req, res) => {
     }
 
     res.status(200).json(response.data);
-  } catch (error) {
-    console.error('Error sending media via Evolution API:', error);
+  } catch (error: any) {
+    const status = error?.response?.status || error?.output?.statusCode || 500;
+    const payload = error?.response?.data || error?.output?.payload || { error: 'Failed to send media' };
+    console.error('Error sending media via Evolution API:', {
+      status,
+      payload,
+      message: error?.message,
+    });
     
     // Record the failed media message attempt
     try {
@@ -183,7 +200,10 @@ router.post('/media', async (req, res) => {
       // Continue with the error response even if activity recording fails
     }
     
-    res.status(500).json({ error: 'Failed to send media' });
+    if (status === 408) {
+      return res.status(408).json({ error: 'Evolution API timed out. Instance may be disconnected or unreachable.' });
+    }
+    res.status(status).json(typeof payload === 'object' ? payload : { error: String(payload) });
   }
 });
 
