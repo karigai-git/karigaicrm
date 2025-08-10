@@ -35,15 +35,18 @@ import {
   Edit,
   AlertCircle,
   Printer,
+  Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Card, CardContent } from "@/components/ui/card";
+import { updateOrderTrackingAndShip } from "@/lib/pocketbase";
 
 // Keep types exactly the same
 export type OrderStatus =
   | "pending"
   | "processing"
+  | "dispatched"
   | "shipped"
   | "delivered"
   | "cancelled"
@@ -63,6 +66,7 @@ const getStatusBadge = (status: OrderStatus) => {
   const variants: Record<OrderStatus, { color: string; label: string }> = {
     pending: { color: "bg-yellow-100 text-yellow-800", label: "Pending" },
     processing: { color: "bg-blue-100 text-blue-800", label: "Processing" },
+    dispatched: { color: "bg-cyan-100 text-cyan-800", label: "Dispatched" },
     shipped: { color: "bg-purple-100 text-purple-800", label: "Shipped" },
     delivered: { color: "bg-green-100 text-green-800", label: "Delivered" },
     cancelled: { color: "bg-red-100 text-red-800", label: "Cancelled" },
@@ -127,13 +131,18 @@ export const OrdersTable: FC<OrdersTableProps> = ({
   const statusOptions: { value: OrderStatus; label: string }[] = [
     { value: "pending", label: "Pending" },
     { value: "processing", label: "Processing" },
+    { value: "dispatched", label: "Dispatched" },
     { value: "out_for_delivery", label: "Out for Delivery" },
     { value: "shipped", label: "Shipped" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
   ];
 
-  async function triggerStatusWebhook(order: Order, newStatus: OrderStatus) {
+  async function triggerStatusWebhook(
+    order: Order,
+    newStatus: OrderStatus,
+    extra?: { tracking_code?: string; tracking_url?: string }
+  ) {
     try {
       await fetch(WEBHOOK_URL, {
         method: "POST",
@@ -147,6 +156,8 @@ export const OrdersTable: FC<OrdersTableProps> = ({
           customer_name: order.customer_name || order.user_name || "",
           customer_email: order.customer_email || order.user_email || "",
           total: order.total,
+          tracking_code: extra?.tracking_code ?? (order as any).tracking_code ?? "",
+          tracking_url: extra?.tracking_url ?? (order as any).tracking_url ?? "",
           created: order.created,
           timestamp: new Date().toISOString(),
         }),
@@ -155,6 +166,136 @@ export const OrdersTable: FC<OrdersTableProps> = ({
       console.error("Failed to POST status change to webhook", err);
     }
   }
+
+  // Export filtered orders as CSV (date-specific filename)
+  const exportOrdersAsCSV = () => {
+    const rows = selectedOrders;
+    if (!rows || rows.length === 0) return;
+
+    const headers = [
+      "id",
+      "customer_name",
+      "customer_phone",
+      "customer_email",
+      "status",
+      "payment_status",
+      "total",
+      "tracking_code",
+      "tracking_url",
+      "created",
+    ];
+
+    const escape = (val: unknown) => {
+      const s = (val ?? "").toString();
+      // wrap in quotes, escape quotes
+      return '"' + s.replace(/"/g, '""') + '"';
+    };
+
+    const csvLines = [headers.join(",")];
+    for (const o of rows) {
+      csvLines.push(
+        [
+          escape(o.id),
+          escape(o.customer_name || ""),
+          escape(o.customer_phone || ""),
+          escape(o.customer_email || ""),
+          escape(o.status || ""),
+          escape(o.payment_status || ""),
+          escape((o as any).total ?? ""),
+          escape((o as any).tracking_code ?? ""),
+          escape((o as any).tracking_url ?? ""),
+          escape(format(new Date(o.created), "yyyy-MM-dd HH:mm")),
+        ].join(",")
+      );
+    }
+
+    const csv = csvLines.join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    // Filename with date range if present
+    let name = "orders";
+    if (dateRange?.from) {
+      const fromStr = format(dateRange.from, "yyyyMMdd");
+      if (dateRange.to) {
+        const toStr = format(dateRange.to, "yyyyMMdd");
+        name += `_${fromStr}-${toStr}`;
+      } else {
+        name += `_${fromStr}`;
+      }
+    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Upload CSV: expects headers id,tracking_code,tracking_url
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUploadClick = () => fileInputRef.current?.click();
+
+  const parseCsv = (text: string) => {
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length === 0) return [] as any[];
+    const headers = lines[0]
+      .split(",")
+      .map((h) => h.trim().replace(/^"|"$/g, ""));
+    const idxId = headers.indexOf("id");
+    const idxCode = headers.indexOf("tracking_code");
+    const idxUrl = headers.indexOf("tracking_url");
+    if (idxId === -1) return [] as any[];
+    return lines
+      .slice(1)
+      .map((line) => {
+        const cols = line
+          .split(/,(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)/)
+          .map((c) => c.trim().replace(/^"|"$/g, ""));
+        return {
+          id: cols[idxId] || "",
+          tracking_code: idxCode >= 0 ? cols[idxCode] || "" : "",
+          tracking_url: idxUrl >= 0 ? cols[idxUrl] || "" : "",
+        };
+      })
+      .filter((r) => r.id);
+  };
+
+  const onUploadCsv: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploading(true);
+      const text = await file.text();
+      const rows = parseCsv(text);
+      for (const r of rows) {
+        // Skip rows without tracking_code; do not change status in that case
+        if (!r.tracking_code || r.tracking_code.trim() === "") {
+          console.warn("CSV row missing tracking_code; skipping id:", r.id);
+          continue;
+        }
+        try {
+          await updateOrderTrackingAndShip(r.id, r.tracking_code, r.tracking_url);
+          const order = orders.find((o) => o.id === r.id);
+          if (order) {
+            triggerStatusWebhook(order, "shipped", {
+              tracking_code: r.tracking_code,
+              tracking_url: r.tracking_url,
+            });
+          }
+        } catch (err) {
+          console.error("Failed to update order from CSV", r.id, err);
+        }
+      }
+      onRefresh?.();
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   async function handleStatusChange(order: Order, value: string) {
     const newStatus = value as OrderStatus;
@@ -183,6 +324,10 @@ export const OrdersTable: FC<OrdersTableProps> = ({
 
   const handlePrintSingleOrder = (order: Order) => {
     window.dispatchEvent(new CustomEvent("print-order", { detail: order }));
+    // After printing a single slip, set status to dispatched
+    onUpdateStatus(order.id, "dispatched");
+    triggerStatusWebhook(order, "dispatched");
+    onRefresh?.();
   };
 
   const handlePrintSelectedOrders = () => {
@@ -191,6 +336,13 @@ export const OrdersTable: FC<OrdersTableProps> = ({
       detail: { orders: selectedOrders },
     });
     window.dispatchEvent(printEvent);
+
+    // After printing multiple slips, set each to dispatched
+    selectedOrders.forEach((o) => {
+      onUpdateStatus(o.id, "dispatched");
+      triggerStatusWebhook(o, "dispatched");
+    });
+    onRefresh?.();
   };
 
   const resetFilters = () => {
@@ -298,6 +450,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="dispatched">Dispatched</SelectItem>
                   <SelectItem value="shipped">Shipped</SelectItem>
                   <SelectItem value="delivered">Delivered</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
@@ -333,13 +486,32 @@ export const OrdersTable: FC<OrdersTableProps> = ({
               </label>
               <DateRangePicker value={dateRange} onChange={setDateRange} />
             </div>
-            <div className="flex items-end">
+            <div className="flex items-end gap-2 flex-wrap">
               <Button
                 variant="secondary"
                 onClick={resetFilters}
-                className="w-full"
               >
                 Reset Filters
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={onUploadCsv}
+              />
+              <Button
+                variant="outline"
+                onClick={handleUploadClick}
+                disabled={uploading}
+              >
+                {uploading ? "Uploading..." : "Upload CSV"}
+              </Button>
+              <Button
+                onClick={exportOrdersAsCSV}
+                disabled={selectedOrders.length === 0}
+              >
+                <Download className="mr-2 h-4 w-4" /> Download Selected
               </Button>
             </div>
           </div>

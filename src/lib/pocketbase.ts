@@ -168,6 +168,27 @@ export const updateOrderStatus = async (id: string, status: string) => {
   }
 };
 
+// Update tracking details and mark as shipped
+export const updateOrderTrackingAndShip = async (
+  id: string,
+  tracking_code: string,
+  tracking_url: string
+) => {
+  try {
+    await ensureAdminAuth();
+    const data: any = {
+      tracking_code,
+      tracking_url,
+      status: 'shipped',
+    };
+    const record = await pb.collection('orders').update(id, data);
+    return record;
+  } catch (error) {
+    console.error(`Error updating tracking for order ${id}:`, error);
+    throw error;
+  }
+};
+
 // Get dashboard metrics
 export const getDashboardMetrics = async () => {
   try {

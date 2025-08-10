@@ -332,6 +332,24 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                           </div>
                         )}
                       </div>
+                      <div className="col-span-2">
+                        <Label className="font-semibold">Tracking</Label>
+                        <div className="text-sm mt-1 space-x-2">
+                          <span>
+                            Code: {((order as any).tracking_code as string) || "—"}
+                          </span>
+                          {((order as any).tracking_url as string) ? (
+                            <a
+                              href={(order as any).tracking_url as string}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                              className="text-blue-600 underline"
+                            >
+                              View Tracking
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
