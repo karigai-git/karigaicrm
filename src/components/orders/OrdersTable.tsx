@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Order } from "@/types/schema";
+import type { DateRange } from "react-day-picker";
 import type { FC } from "react";
 import {
   Search,
@@ -116,8 +117,57 @@ export const OrdersTable: FC<OrdersTableProps> = ({
   const [paymentStatusFilter, setPaymentStatusFilter] =
     useState<string>("paid");
   const [selectedOrders, setSelectedOrders] = useState<Order[]>([]);
-  const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Webhook target for status changes
+  const WEBHOOK_URL =
+    "https://backend-n8n.7za6uc.easypanel.host/webhook/karigaiorders";
+
+  const statusOptions: { value: OrderStatus; label: string }[] = [
+    { value: "pending", label: "Pending" },
+    { value: "processing", label: "Processing" },
+    { value: "out_for_delivery", label: "Out for Delivery" },
+    { value: "shipped", label: "Shipped" },
+    { value: "delivered", label: "Delivered" },
+    { value: "cancelled", label: "Cancelled" },
+  ];
+
+  async function triggerStatusWebhook(order: Order, newStatus: OrderStatus) {
+    try {
+      await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: "order_status_changed",
+          source: "karigai-crm",
+          order_id: order.id,
+          previous_status: order.status,
+          status: newStatus,
+          customer_name: order.customer_name || order.user_name || "",
+          customer_email: order.customer_email || order.user_email || "",
+          total: order.total,
+          created: order.created,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to POST status change to webhook", err);
+    }
+  }
+
+  async function handleStatusChange(order: Order, value: string) {
+    const newStatus = value as OrderStatus;
+    try {
+      // Update local/backend via provided callback
+      onUpdateStatus(order.id, newStatus);
+    } finally {
+      // Fire-and-forget webhook to trigger n8n flows
+      triggerStatusWebhook(order, newStatus);
+      // Optional refresh hook
+      onRefresh?.();
+    }
+  }
 
   const toggleOrderSelection = (order: Order) => {
     setSelectedOrders((prev) => {
@@ -147,7 +197,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
     setSearchQuery("");
     setStatusFilter("all");
     setPaymentStatusFilter("all");
-    setDateRange({});
+    setDateRange(undefined);
   };
 
   const filteredOrders = orders.filter((order) => {
@@ -165,7 +215,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
       order.payment_status === paymentStatusFilter;
 
     let matchesDateRange = true;
-    if (dateRange.from) {
+    if (dateRange?.from) {
       const d = new Date(order.created);
       matchesDateRange = d >= dateRange.from!;
       if (dateRange.to) {
@@ -281,7 +331,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
               <label className="text-sm font-medium mb-1 block">
                 Date Range
               </label>
-              <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+              <DateRangePicker value={dateRange} onChange={setDateRange} />
             </div>
             <div className="flex items-end">
               <Button
@@ -298,7 +348,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
 
       {(statusFilter !== "all" ||
         paymentStatusFilter !== "all" ||
-        dateRange.from) && (
+        dateRange?.from) && (
         <div className="flex flex-wrap gap-2 text-sm">
           <span className="font-medium">Active filters:</span>
           {statusFilter !== "all" && (
@@ -307,10 +357,10 @@ export const OrdersTable: FC<OrdersTableProps> = ({
           {paymentStatusFilter !== "all" && (
             <Badge variant="secondary">Payment: {paymentStatusFilter}</Badge>
           )}
-          {dateRange.from && (
+          {dateRange?.from && (
             <Badge variant="secondary">
-              Date: {format(dateRange.from!, "dd MMM yyyy")}{" "}
-              {dateRange.to && ` - ${format(dateRange.to, "dd MMM yyyy")}`}
+              Date: {format(dateRange.from!, "dd MMM yyyy")} {" "}
+              {dateRange?.to && ` - ${format(dateRange.to, "dd MMM yyyy")}`}
             </Badge>
           )}
         </div>
@@ -402,8 +452,22 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                       </div>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {getStatusBadge(order.status as OrderStatus)}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Select
+                        defaultValue={order.status as OrderStatus}
+                        onValueChange={(val) => handleStatusChange(order, val)}
+                      >
+                        <SelectTrigger className="w-[180px] h-8">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       {getPaymentStatusBadge(
                         order.payment_status as PaymentStatus
                       )}
@@ -516,7 +580,21 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                     </div>
                   </TableCell>
                   <TableCell>
-                    {getStatusBadge(order.status as OrderStatus)}
+                    <Select
+                      defaultValue={order.status as OrderStatus}
+                      onValueChange={(val) => handleStatusChange(order, val)}
+                    >
+                      <SelectTrigger className="w-[180px] h-8">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
                     {getPaymentStatusBadge(
