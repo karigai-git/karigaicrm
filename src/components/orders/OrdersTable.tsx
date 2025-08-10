@@ -155,6 +155,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
           status: newStatus,
           customer_name: order.customer_name || order.user_name || "",
           customer_email: order.customer_email || order.user_email || "",
+          customer_phone: order.customer_phone || (order as any).user_phone || "",
           total: order.total,
           tracking_code: extra?.tracking_code ?? (order as any).tracking_code ?? "",
           tracking_url: extra?.tracking_url ?? (order as any).tracking_url ?? "",
