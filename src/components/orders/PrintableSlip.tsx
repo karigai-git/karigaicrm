@@ -150,6 +150,14 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
             // Generate tracking number
             const trackingNumber = order.tracking_number || order.id.slice(0, 8);
             
+            // Derive shipping fee from various possible fields and formats (type-safe, no any)
+            const shippingFee = (() => {
+              const rec = order as unknown as Record<string, unknown>;
+              const raw = (rec['shipping_fee'] ?? rec['shipping_cost'] ?? rec['shippingCost'] ?? 0) as unknown;
+              const num = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+              return Number.isFinite(num) ? num : 0;
+            })();
+            
             return (
               <div key={order.id} className={`${getSlipStyles()} border-2 border-black flex flex-col font-sans text-xs overflow-hidden mb-6 sm:mb-0 mx-auto`}>
                 {/* Top Section: Tracking Info */}
@@ -215,7 +223,7 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
                         {/* Shipping */}
                         <tr>
                           <td className="py-0.5 md:py-1">Shipping:</td>
-                          <td className="py-0.5 md:py-1 text-right">₹{order.shipping_fee?.toFixed(2) || '0.00'}</td>
+                          <td className="py-0.5 md:py-1 text-right">₹{shippingFee.toFixed(2)}</td>
                         </tr>
                         
                         {/* Tax */}

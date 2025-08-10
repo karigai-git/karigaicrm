@@ -192,6 +192,14 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
     } catch { return undefined; }
   };
 
+  // ===== Shipping fee (robust derivation) =====
+  const shippingFee = (() => {
+    const rec = order as unknown as Record<string, unknown>;
+    const raw = (rec["shipping_fee"] ?? rec["shipping_cost"] ?? rec["shippingCost"] ?? 0) as unknown;
+    const num = typeof raw === "string" ? parseFloat(raw) : Number(raw);
+    return Number.isFinite(num) ? num : 0;
+  })();
+
   // ===== UI =====
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -410,6 +418,7 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                       ))}
                       <div className="border-t pt-4 space-y-2">
                         <div className="flex justify-between"><span className="font-medium">Subtotal:</span><span>₹{order.subtotal?.toFixed(2) || "0.00"}</span></div>
+                        <div className="flex justify-between"><span className="font-medium">Shipping:</span><span>₹{shippingFee.toFixed(2)}</span></div>
                         {order.discount_amount && order.discount_amount > 0 && (
                           <div className="flex justify-between text-green-600"><span className="font-medium">Discount:</span><span>-₹{order.discount_amount.toFixed(2)}</span></div>
                         )}
@@ -457,6 +466,7 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                   <Separator />
                   <div className="space-y-2">
                     <div className="flex justify-between"><span>Subtotal:</span><span>₹{order.subtotal?.toFixed(2) || "0.00"}</span></div>
+                    <div className="flex justify-between"><span>Shipping:</span><span>₹{shippingFee.toFixed(2)}</span></div>
                     {order.discount_amount && order.discount_amount > 0 && (
                       <div className="flex justify-between text-green-600"><span>Discount:</span><span>-₹{order.discount_amount.toFixed(2)}</span></div>
                     )}

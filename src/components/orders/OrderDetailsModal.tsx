@@ -156,7 +156,16 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Shipping</span>
-                  <span>₹{order.shipping_fee.toFixed(2)}</span>
+                  <span>
+                    ₹{
+                      (() => {
+                        const rec = order as unknown as Record<string, unknown>;
+                        const raw = (rec['shipping_fee'] ?? rec['shipping_cost'] ?? rec['shippingCost'] ?? 0) as unknown;
+                        const num = typeof raw === 'string' ? parseFloat(raw) : Number(raw);
+                        return Number.isFinite(num) ? num : 0;
+                      })().toFixed(2)
+                    }
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax</span>
