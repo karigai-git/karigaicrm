@@ -15,9 +15,9 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layou
   // Define grid layout based on number of slips per page
   const getGridStyles = () => {
     switch (layout) {
-      case 2: return 'grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8';
-      case 4: return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4 sm:gap-6';
-      case 6: return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4';
+      case 2: return 'grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 print:gap-2';
+      case 4: return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4 sm:gap-6 print:gap-2';
+      case 6: return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 print:gap-2';
       default: return '';
     }
   };
@@ -159,7 +159,7 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layou
             })();
             
             return (
-              <div key={order.id} className={`${getSlipStyles()} border-2 border-black flex flex-col font-sans text-xs overflow-hidden mb-6 sm:mb-0 mx-auto`}>
+              <div key={order.id} className={`${getSlipStyles()} border-2 border-black flex flex-col font-sans text-xs overflow-hidden mb-0 mx-auto`}>
                 {/* Top Section: Tracking Info */}
                 <div className="flex justify-between items-center border-b border-black pb-1 mb-1">
                   <div className="text-left">
