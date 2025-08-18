@@ -26,6 +26,8 @@ export const PrintOrderDialog: React.FC = () => {
   const [printLayout, setPrintLayout] = useState<LayoutOption>(2);
   const [ordersToPrint, setOrdersToPrint] = useState<Order[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [hideDetails, setHideDetails] = useState(false);
+  const [largeAddress, setLargeAddress] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   // Helper to load expanded orders for accurate printing
@@ -160,7 +162,7 @@ export const PrintOrderDialog: React.FC = () => {
             {ordersToPrint.length} order{ordersToPrint.length !== 1 ? 's' : ''} selected for printing
           </p>
           
-          <div className="flex items-center">
+          <div className="flex items-center gap-4">
             <span className="text-sm mr-2">Layout:</span>
             <Select value={printLayout.toString()} onValueChange={(value) => setPrintLayout(parseInt(value) as LayoutOption)}>
               <SelectTrigger className="w-[120px]">
@@ -173,11 +175,31 @@ export const PrintOrderDialog: React.FC = () => {
                 <SelectItem value="6">Six (3×2)</SelectItem>
               </SelectContent>
             </Select>
+
+            <label className="flex items-center text-sm select-none cursor-pointer">
+              <input
+                type="checkbox"
+                className="mr-2"
+                checked={hideDetails}
+                onChange={(e) => setHideDetails(e.target.checked)}
+              />
+              Hide product details
+            </label>
+
+            <label className="flex items-center text-sm select-none cursor-pointer">
+              <input
+                type="checkbox"
+                className="mr-2"
+                checked={largeAddress}
+                onChange={(e) => setLargeAddress(e.target.checked)}
+              />
+              Large address
+            </label>
           </div>
         </div>
         
         <div className="max-h-[60vh] overflow-auto border rounded-md p-4">
-          <PrintableSlip ref={printRef} orders={ordersToPrint} layout={printLayout} />
+          <PrintableSlip ref={printRef} orders={ordersToPrint} layout={printLayout} hideDetails={hideDetails} largeAddress={largeAddress} />
         </div>
         
         <DialogFooter>

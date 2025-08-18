@@ -7,7 +7,7 @@ export type LayoutOption = 1 | 2 | 4 | 6;
 
 // This component is what will actually be printed.
 // It's designed to be roughly 4x4 inches.
-export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layout: LayoutOption }>(({ orders, layout }, ref) => {
+export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layout: LayoutOption; hideDetails?: boolean; largeAddress?: boolean }>(({ orders, layout, hideDetails = false, largeAddress = false }, ref) => {
   if (!orders || orders.length === 0) {
     return null;
   }
@@ -181,75 +181,77 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
                 <div className="flex-grow flex flex-col">
                   {/* To Address */}
                   <div className="mb-1">
-                    <p className="font-bold text-xs md:text-sm">TO:</p>
+                    <p className={largeAddress ? "font-bold text-sm md:text-base" : "font-bold text-xs md:text-sm"}>TO:</p>
                     <div className="pl-2">
-                      <p className="text-xs md:text-sm font-bold">{customerName}</p>
+                      <p className={largeAddress ? "text-sm md:text-base font-bold" : "text-xs md:text-sm font-bold"}>{customerName}</p>
                       {addressLines.map((line, idx) => (
-                        <p key={idx} className="text-xs md:text-sm leading-tight break-words">{line}</p>
+                        <p key={idx} className={largeAddress ? "text-sm md:text-base leading-tight break-words" : "text-xs md:text-sm leading-tight break-words"}>{line}</p>
                       ))}
-                      <p className="text-xs md:text-sm">Phone: {customerPhone}</p>
+                      <p className={largeAddress ? "text-sm md:text-base" : "text-xs md:text-sm"}>Phone: {customerPhone}</p>
                     </div>
                   </div>
 
-                  {/* Product Details */}
-                  <div className="border-t border-b border-dashed py-1 my-1">
-                    <table className="w-full text-xs md:text-sm">
-                      <tbody>
-                        {resolveItems(order).map((row, index) => (
-                          <React.Fragment key={index}>
-                            <tr>
-                              <td className="py-0.5 md:py-1">{row.name}</td>
-                              <td className="py-0.5 md:py-1 text-right">{row.quantity} x ₹{row.price.toFixed(2)}</td>
-                            </tr>
-                            <tr className="border-b border-dotted">
-                              <td></td>
-                              <td className="py-0.5 md:py-1 text-right font-bold">₹{row.total.toFixed(2)}</td>
-                            </tr>
-                          </React.Fragment>
-                        ))}
+                  {/* Product Details (optional) */}
+                  {!hideDetails && (
+                    <div className="border-t border-b border-dashed py-1 my-1">
+                      <table className="w-full text-xs md:text-sm">
+                        <tbody>
+                          {resolveItems(order).map((row, index) => (
+                            <React.Fragment key={index}>
+                              <tr>
+                                <td className="py-0.5 md:py-1">{row.name}</td>
+                                <td className="py-0.5 md:py-1 text-right">{row.quantity} x ₹{row.price.toFixed(2)}</td>
+                              </tr>
+                              <tr className="border-b border-dotted">
+                                <td></td>
+                                <td className="py-0.5 md:py-1 text-right font-bold">₹{row.total.toFixed(2)}</td>
+                              </tr>
+                            </React.Fragment>
+                          ))}
 
-                        {resolveItems(order).length === 0 && (
+                          {resolveItems(order).length === 0 && (
+                            <tr>
+                              <td colSpan={2} className="text-center py-1 text-gray-500">Order items not available</td>
+                            </tr>
+                          )}
+                          
+                          {/* Subtotal */}
                           <tr>
-                            <td colSpan={2} className="text-center py-1 text-gray-500">Order items not available</td>
+                            <td className="py-0.5 md:py-1">Subtotal:</td>
+                            <td className="py-0.5 md:py-1 text-right">₹{order.subtotal?.toFixed(2) || '0.00'}</td>
                           </tr>
-                        )}
-                        
-                        {/* Subtotal */}
-                        <tr>
-                          <td className="py-0.5 md:py-1">Subtotal:</td>
-                          <td className="py-0.5 md:py-1 text-right">₹{order.subtotal?.toFixed(2) || '0.00'}</td>
-                        </tr>
-                        
-                        {/* Shipping */}
-                        <tr>
-                          <td className="py-0.5 md:py-1">Shipping:</td>
-                          <td className="py-0.5 md:py-1 text-right">₹{shippingFee.toFixed(2)}</td>
-                        </tr>
-                        
-                        {/* Tax */}
-                        {order.tax > 0 && (
+                          
+                          {/* Shipping */}
                           <tr>
-                            <td className="py-0.5 md:py-1">Tax:</td>
-                            <td className="py-0.5 md:py-1 text-right">₹{order.tax?.toFixed(2) || '0.00'}</td>
+                            <td className="py-0.5 md:py-1">Shipping:</td>
+                            <td className="py-0.5 md:py-1 text-right">₹{shippingFee.toFixed(2)}</td>
                           </tr>
-                        )}
-                        
-                        {/* Discount */}
-                        {order.discount > 0 && (
-                          <tr>
-                            <td className="py-0.5 md:py-1">Discount:</td>
-                            <td className="py-0.5 md:py-1 text-right">-₹{order.discount?.toFixed(2) || '0.00'}</td>
+                          
+                          {/* Tax */}
+                          {order.tax > 0 && (
+                            <tr>
+                              <td className="py-0.5 md:py-1">Tax:</td>
+                              <td className="py-0.5 md:py-1 text-right">₹{order.tax?.toFixed(2) || '0.00'}</td>
+                            </tr>
+                          )}
+                          
+                          {/* Discount */}
+                          {order.discount > 0 && (
+                            <tr>
+                              <td className="py-0.5 md:py-1">Discount:</td>
+                              <td className="py-0.5 md:py-1 text-right">-₹{order.discount?.toFixed(2) || '0.00'}</td>
+                            </tr>
+                          )}
+                          
+                          {/* Total */}
+                          <tr className="font-bold">
+                            <td className="py-0.5 md:py-1 text-sm">Total:</td>
+                            <td className="py-0.5 md:py-1 text-right text-sm">₹{order.total?.toFixed(2) || '0.00'}</td>
                           </tr>
-                        )}
-                        
-                        {/* Total */}
-                        <tr className="font-bold">
-                          <td className="py-0.5 md:py-1 text-sm">Total:</td>
-                          <td className="py-0.5 md:py-1 text-right text-sm">₹{order.total?.toFixed(2) || '0.00'}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   {/* Order Info */}
                   <div className="flex justify-between text-xs pt-1">
@@ -266,6 +268,18 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[], layou
 
                 {/* Bottom Section: Footer */}
                 <div className="border-t border-black mt-1 pt-1 text-center">
+                  <div className="w-full flex justify-center mb-1">
+                    <img
+                      src="https://shop.karigaistore.in/karigai-logo.webp"
+                      alt="Karigai logo"
+                      className="inline-block"
+                      style={{ maxWidth: '120px', height: 'auto' }}
+                      onError={(e) => {
+                        // fallback: hide broken image
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
                   <p className="text-xs font-bold">Thank you for shopping with Karigai!</p>
                   <p className="text-xs">For any questions, contact us at support@karigai.com</p>
                 </div>
