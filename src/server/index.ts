@@ -64,15 +64,15 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/email', emailRoutes);
-app.use('/api/evolution', evolutionRoutes);
+app.use('/email', emailRoutes);
+app.use('/evolution', evolutionRoutes);
 
 // In-memory store for push subscriptions
 const subscriptions: webpush.PushSubscription[] = [];
 
 
 // Route to subscribe to push notifications
-app.post('/api/notifications/subscribe', (req, res) => {
+app.post('/notifications/subscribe', (req, res) => {
   const subscription = req.body;
   subscriptions.push(subscription);
   console.log('New subscription added:', subscription.endpoint);
@@ -80,7 +80,7 @@ app.post('/api/notifications/subscribe', (req, res) => {
 });
 
 // Route to send a test notification
-app.post('/api/notifications/send', (req, res) => {
+app.post('/notifications/send', (req, res) => {
   const notificationPayload = {
     notification: {
       title: 'New Order Created!',
