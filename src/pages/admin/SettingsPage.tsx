@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
+import { requestNotificationPermission } from '@/lib/push-notifications';
 
 const generalFormSchema = z.object({
   storeName: z.string().min(2, {
@@ -94,6 +95,17 @@ const SettingsPage = () => {
   const onSecuritySubmit = (data: z.infer<typeof securityFormSchema>) => {
     console.log("Security settings updated:", data);
     // Here you would update the settings via API
+  };
+
+  const handleEnablePushNotifications = async () => {
+    const permission = await requestNotificationPermission();
+    if (permission === 'granted') {
+      // Optionally, show a success message to the user
+      console.log('Push notifications enabled.');
+    } else {
+      // Optionally, show an informative message
+      console.log('Push notification permission was not granted.');
+    }
   };
 
   return (
@@ -218,8 +230,26 @@ const SettingsPage = () => {
           <TabsContent value="notifications" className="space-y-4 mt-4">
             <Card>
               <CardHeader>
-                <CardTitle>Notification Settings</CardTitle>
-                <CardDescription>Configure when and how you receive notifications.</CardDescription>
+                <CardTitle>Push Notifications</CardTitle>
+                <CardDescription>Enable push notifications to receive real-time alerts on your device.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="space-y-0.5">
+                    <FormLabel>Browser Notifications</FormLabel>
+                    <FormDescription>
+                      Receive alerts for new orders and important updates directly in your browser.
+                    </FormDescription>
+                  </div>
+                  <Button onClick={handleEnablePushNotifications}>Enable</Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Email Notification Settings</CardTitle>
+                <CardDescription>Configure when and how you receive email notifications.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Form {...notificationForm}>

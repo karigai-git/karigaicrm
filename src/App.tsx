@@ -18,7 +18,7 @@ import EmailTemplatesPage from "./pages/admin/EmailTemplatesPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 import CampaignsPage from "./pages/admin/CampaignsPage";
-import { requestNotificationPermission } from '@/lib/push-notifications';
+import PwaUpdateNotification from "./components/PwaUpdateNotification";
 
 // Set PocketBase URL from environment variable
 if (import.meta.env.VITE_POCKETBASE_URL) {
@@ -51,7 +51,6 @@ const App = () => {
           });
       });
     }
-    requestNotificationPermission();
   }, []);
 
   return (
@@ -60,6 +59,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <PwaUpdateNotification />
         <BrowserRouter>
           <Routes>
             {/* Public routes */}

@@ -70,10 +70,6 @@ app.use('/api/evolution', evolutionRoutes);
 // In-memory store for push subscriptions
 const subscriptions: webpush.PushSubscription[] = [];
 
-// Route to get VAPID public key
-app.get('/api/notifications/vapidPublicKey', (req, res) => {
-  res.send(vapidPublicKey);
-});
 
 // Route to subscribe to push notifications
 app.post('/api/notifications/subscribe', (req, res) => {

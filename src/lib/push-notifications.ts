@@ -1,4 +1,3 @@
-const VAPID_PUBLIC_KEY_URL = '/api/notifications/vapidPublicKey';
 const SUBSCRIBE_URL = '/api/notifications/subscribe';
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -29,8 +28,11 @@ export async function subscribeToPushNotifications() {
       return;
     }
 
-    const response = await fetch(VAPID_PUBLIC_KEY_URL);
-    const vapidPublicKey = await response.text();
+    const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+    if (!vapidPublicKey) {
+      console.error('VITE_VAPID_PUBLIC_KEY is not set.');
+      return;
+    }
     const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
     subscription = await registration.pushManager.subscribe({
