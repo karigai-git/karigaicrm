@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -17,6 +18,7 @@ import EmailTemplatesPage from "./pages/admin/EmailTemplatesPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 import CampaignsPage from "./pages/admin/CampaignsPage";
+import { requestNotificationPermission } from '@/lib/push-notifications';
 
 // Set PocketBase URL from environment variable
 if (import.meta.env.VITE_POCKETBASE_URL) {
@@ -36,7 +38,23 @@ const queryClient = new QueryClient({
   },
 });
 
-const App = () => (
+const App = () => {
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('Service Worker registered: ', registration);
+          })
+          .catch(registrationError => {
+            console.log('Service Worker registration failed: ', registrationError);
+          });
+      });
+    }
+    requestNotificationPermission();
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="konipai-theme">
       <TooltipProvider>
@@ -68,6 +86,7 @@ const App = () => (
       </TooltipProvider>
     </ThemeProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
