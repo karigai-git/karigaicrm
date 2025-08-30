@@ -198,7 +198,7 @@ export function useProducts(params: ProductsQueryParams = {}) {
 
   // Create product
   const createProduct = useMutation({
-    mutationFn: async (data: CreateProductData) => {
+    mutationFn: async (data: CreateProductData | FormData) => {
       try {
         await ensureAdminAuth();
         const record = await pb.collection('products').create(data);

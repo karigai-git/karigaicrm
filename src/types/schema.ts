@@ -41,6 +41,17 @@ export interface Product extends BaseRecord {
   specifications?: string;
   care_instructions?: string;
   usage_guidelines?: string;
+  // Newly added optional fields
+  list_order?: number;
+  original_price?: number;
+  qikink_sku?: string;
+  print_type_id?: number;
+  product_type?: string;
+  available_colors?: string;
+  available_sizes?: string;
+  videoUrl?: string;
+  videoThumbnail?: string;
+  videoDescription?: string;
 }
 
 export interface Coupon extends BaseRecord {
@@ -156,6 +167,17 @@ export type CreateProductData = {
   specifications?: string;
   care_instructions?: string;
   usage_guidelines?: string;
+  // Newly added optional fields
+  list_order?: number;
+  original_price?: number;
+  qikink_sku?: string;
+  print_type_id?: number;
+  product_type?: string;
+  available_colors?: string;
+  available_sizes?: string;
+  videoUrl?: string;
+  videoThumbnail?: string;
+  videoDescription?: string;
 };
 
 export type CreateOrderData = {

@@ -31,7 +31,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { pb, getImageUrl } from '@/lib/pocketbase';
+
 
 // Define the type for ProductFormValues
 type ProductFormValues = {
@@ -54,12 +54,23 @@ type ProductFormValues = {
   new?: boolean;
   inStock?: boolean;
   review?: number;
+  // Newly requested fields
+  list_order?: number;
+  original_price?: number;
+  qikink_sku?: string;
+  print_type_id?: number;
+  product_type?: string;
+  available_colors?: string;
+  available_sizes?: string;
+  videoUrl?: string;
+  videoThumbnail?: string;
+  videoDescription?: string;
 };
 
 interface CreateProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: CreateProductData) => Promise<void>;
+  onSubmit: (data: CreateProductData | FormData) => Promise<void>;
 }
 
 export function CreateProductDialog({
@@ -71,13 +82,16 @@ export function CreateProductDialog({
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   
+  // Fixed category options
+  const CATEGORY_OPTIONS = ['soap', 'powder', 'gel', 'oil', 'other'] as const;
+  
   // Define form schema
   const formSchema = z.object({
     name: z.string().min(1, 'Product name is required'),
     description: z.string().optional(),
     price: z.number().min(0.01, 'Price must be greater than 0'),
     stock: z.number().optional(),
-    category: z.string().optional(),
+    category: z.enum(CATEGORY_OPTIONS).optional(),
     status: z.enum(['active', 'inactive']),
     material: z.string().optional(),
     dimensions: z.string().optional(),
@@ -92,6 +106,17 @@ export function CreateProductDialog({
     new: z.boolean().default(false),
     inStock: z.boolean().default(true),
     review: z.number().min(0).max(5).optional(),
+    // New fields
+    list_order: z.number().optional(),
+    original_price: z.number().optional(),
+    qikink_sku: z.string().optional(),
+    print_type_id: z.number().optional(),
+    product_type: z.string().optional(),
+    available_colors: z.string().optional(),
+    available_sizes: z.string().optional(),
+    videoUrl: z.string().optional(),
+    videoThumbnail: z.string().optional(),
+    videoDescription: z.string().optional(),
   });
   
   // Initialize form
@@ -102,7 +127,7 @@ export function CreateProductDialog({
       description: '',
       price: 0,
       stock: undefined,
-      category: '',
+      category: undefined,
       status: 'active',
       material: '',
       dimensions: '',
@@ -117,6 +142,16 @@ export function CreateProductDialog({
       new: false,
       inStock: true,
       review: 0,
+      list_order: undefined,
+      original_price: undefined,
+      qikink_sku: '',
+      print_type_id: undefined,
+      product_type: '',
+      available_colors: '',
+      available_sizes: '',
+      videoUrl: '',
+      videoThumbnail: '',
+      videoDescription: '',
     },
   });
 
@@ -185,19 +220,22 @@ export function CreateProductDialog({
       // Format JSON fields before submission
       const processedValues = { ...values };
       
-      // Process array fields
-      ['features', 'tags', 'care'].forEach(field => {
-        if (processedValues[field as keyof ProductFormValues]) {
-          const value = processedValues[field as keyof ProductFormValues] as string;
-          processedValues[field as keyof ProductFormValues] = formatJsonField(value, true) as string;
+      // Process array fields with typed keys to avoid TS "never" error
+      const arrayFields = ['features', 'tags', 'care', 'available_colors', 'available_sizes'] as const;
+      arrayFields.forEach((field) => {
+        const value = processedValues[field];
+        if (value) {
+          // format as JSON array string
+          processedValues[field] = formatJsonField(value, true) as unknown as ProductFormValues[typeof field];
         }
       });
       
-      // Process object fields
-      ['colors', 'specifications', 'care_instructions', 'usage_guidelines'].forEach(field => {
-        if (processedValues[field as keyof ProductFormValues]) {
-          const value = processedValues[field as keyof ProductFormValues] as string;
-          processedValues[field as keyof ProductFormValues] = formatJsonField(value, false) as string;
+      // Process object fields with typed keys
+      const objectFields = ['colors', 'specifications', 'care_instructions', 'usage_guidelines'] as const;
+      objectFields.forEach((field) => {
+        const value = processedValues[field];
+        if (value) {
+          processedValues[field] = formatJsonField(value, false) as unknown as ProductFormValues[typeof field];
         }
       });
       
@@ -250,21 +288,37 @@ export function CreateProductDialog({
         productData.stock = processedValues.stock;
       }
 
-      // Handle image uploads
+      // Handle new optional scalar fields
+      if (processedValues.list_order !== undefined) productData.list_order = processedValues.list_order;
+      if (processedValues.original_price !== undefined) productData.original_price = processedValues.original_price;
+      if (processedValues.qikink_sku) productData.qikink_sku = processedValues.qikink_sku;
+      if (processedValues.print_type_id !== undefined) productData.print_type_id = processedValues.print_type_id;
+      if (processedValues.product_type) productData.product_type = processedValues.product_type;
+      if (processedValues.available_colors) productData.available_colors = processedValues.available_colors;
+      if (processedValues.available_sizes) productData.available_sizes = processedValues.available_sizes;
+      if (processedValues.videoUrl) productData.videoUrl = processedValues.videoUrl;
+      if (processedValues.videoThumbnail) productData.videoThumbnail = processedValues.videoThumbnail;
+      if (processedValues.videoDescription) productData.videoDescription = processedValues.videoDescription;
+
+      // If there are images, send multipart/form-data directly to the products collection
       if (uploadedImages.length > 0) {
-        const uploadedImageIds = await Promise.all(uploadedImages.map(async (image) => {
-          const formData = new FormData();
-          formData.append('file', image);
-          const record = await pb.collection('images').create(formData);
-          return record.id;
-        }));
-
-        // Add uploaded image IDs to product data
-        productData.images = uploadedImageIds;
+        const formData = new FormData();
+        // Append scalar fields
+        Object.entries(productData).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            formData.append(key, String(value));
+          }
+        });
+        // Append image files under the 'images' field (multiple)
+        uploadedImages.forEach((file) => {
+          formData.append('images', file);
+        });
+        // Pass FormData to onSubmit; the hook will send it as-is
+        await onSubmit(formData);
+      } else {
+        // No images: submit JSON payload
+        await onSubmit(productData);
       }
-
-      // Submit the form
-      await onSubmit(productData);
       
       // Reset form and state
       form.reset();
@@ -356,16 +410,45 @@ export function CreateProductDialog({
 
                       <FormField
                         control={form.control}
-                        name="category"
+                        name="original_price"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Category</FormLabel>
-                            <Input {...field} placeholder="Enter category" />
+                            <FormLabel>Original Price</FormLabel>
+                            <Input
+                              {...field}
+                              type="number"
+                              step="0.01"
+                              onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                              placeholder="0.00"
+                            />
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                     </div>
+
+                    <FormField
+                      control={form.control}
+                      name="category"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {CATEGORY_OPTIONS.map((opt) => (
+                                <SelectItem key={opt} value={opt}>
+                                  {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
                     <FormField
                       control={form.control}
@@ -552,6 +635,86 @@ export function CreateProductDialog({
                     />
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="list_order"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>List Order</FormLabel>
+                          <Input
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                            placeholder="e.g., 123"
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="original_price"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Original Price</FormLabel>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                            placeholder="e.g., 999.99"
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="qikink_sku"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Qikink SKU</FormLabel>
+                          <Input {...field} placeholder="e.g., SKU-123" />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="print_type_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Print Type ID</FormLabel>
+                          <Input
+                            type="number"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                            placeholder="e.g., 123"
+                          />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="product_type"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Type</FormLabel>
+                        <Input {...field} placeholder="e.g., Apparel" />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   <FormField
                     control={form.control}
                     name="features"
@@ -609,6 +772,46 @@ export function CreateProductDialog({
                     )}
                   />
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="available_colors"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Available Colors</FormLabel>
+                          <Textarea
+                            {...field}
+                            placeholder='Enter colors separated by commas or as JSON array'
+                            onBlur={(e) => handleJsonFieldBlur(e, true)}
+                          />
+                          <FormDescription>
+                            Enter colors as comma-separated values or a JSON array of strings
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="available_sizes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Available Sizes</FormLabel>
+                          <Textarea
+                            {...field}
+                            placeholder='Enter sizes separated by commas or as JSON array'
+                            onBlur={(e) => handleJsonFieldBlur(e, true)}
+                          />
+                          <FormDescription>
+                            Enter sizes as comma-separated values or a JSON array of strings
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   <FormField
                     control={form.control}
                     name="review"
@@ -624,6 +827,44 @@ export function CreateProductDialog({
                           onChange={(e) => field.onChange(Number(e.target.value))}
                           placeholder="0"
                         />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="videoUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Video URL</FormLabel>
+                          <Input {...field} placeholder="https://..." />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="videoThumbnail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Video Thumbnail URL</FormLabel>
+                          <Input {...field} placeholder="https://..." />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="videoDescription"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Video Description</FormLabel>
+                        <Textarea {...field} className="min-h-[120px]" placeholder="Describe the video" />
                         <FormMessage />
                       </FormItem>
                     )}

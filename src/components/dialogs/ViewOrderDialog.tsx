@@ -172,13 +172,20 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
   const productImageUrl = (record: any, fileName?: string) => {
     const placeholder = "https://placehold.co/200x200/e2e8f0/64748b?text=No+Image";
     if (!fileName) return placeholder;
-    const cid = record?.collectionId || record?.collection || "products";
-    const rid = record?.id;
-    if (cid && rid) return pbGetImageUrl(cid, rid, fileName);
-    if (fileName.startsWith("http")) return fileName;
-    if (typeof fileName === "string" && fileName.includes("/")) {
-      return `${import.meta.env.VITE_POCKETBASE_URL}/api/files/${cid || ""}/${fileName}`;
+    // If already a full URL, use as-is
+    if (typeof fileName === "string" && /^https?:\/\//i.test(fileName)) return fileName;
+    // PocketBase accepts collection id or name in the files URL
+    const cid = record?.collectionId || record?.collectionName || record?.collection || "products";
+    const rid = record?.id || record?.productId;
+    if (cid && rid) {
+      let fname = String(fileName);
+      // Normalize values like "<recordId>/<filename>" to just "<filename>"
+      if (fname.startsWith(`${String(rid)}/`)) {
+        fname = fname.slice(String(rid).length + 1);
+      }
+      return pbGetImageUrl(String(cid), String(rid), fname);
     }
+    // Fallback
     return placeholder;
   };
 
@@ -393,7 +400,7 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                     <div className="space-y-6">
                       {products.map((product, index) => (
                         <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 border-b pb-4">
-                          <div className="md:col-span-1 hidden sm:block">
+                          <div className="md:col-span-1 block mb-3 md:mb-0">
                             <div className="w-full max-w-[150px] mx-auto">
                               <AspectRatio ratio={1 / 1} className="bg-muted rounded-md overflow-hidden">
                                 <img

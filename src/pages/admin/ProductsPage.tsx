@@ -26,6 +26,7 @@ const ProductsPage = () => {
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>('card'); 
   const perPage = 10;
+  const pbUrl = import.meta.env.VITE_POCKETBASE_URL as string | undefined;
 
   const { 
     products, 
@@ -67,13 +68,21 @@ const ProductsPage = () => {
     }
   };
 
-  if (error) {
-    return <div className="p-4">Error loading products: {error.message}</div>;
-  }
+  // Do not hard-fail the page; show a warning and continue rendering with any available data/fallbacks
+  const warning = error
+    ? `Error loading products: ${error.message}`
+    : !pbUrl
+      ? 'PocketBase URL is not configured (VITE_POCKETBASE_URL). Showing sample data.'
+      : '';
 
   return (
     <AdminLayout>
       <div className="space-y-4 p-4">
+        {warning && (
+          <div className="mb-2 rounded border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-800 dark:text-yellow-200">
+            {warning}
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
@@ -127,7 +136,9 @@ const ProductsPage = () => {
         <CreateProductDialog
           open={isCreateDialogOpen}
           onOpenChange={setIsCreateDialogOpen}
-          onSubmit={createProduct.mutateAsync}
+          onSubmit={async (data) => {
+            await createProduct.mutateAsync(data);
+          }}
         />
 
         <ViewProductDialog
