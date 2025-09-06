@@ -163,10 +163,27 @@ const OrdersPage: React.FC = () => {
               // products JSON from dialog
               products: data.products || '[]',
             };
-            // include shipping fee if available
-            if (typeof (data as any).shipping_fee !== 'undefined') {
-              orderData.shipping_fee = Number((data as any).shipping_fee) || 0;
+            // forward created if provided by dialog so PB can use it
+            if ((data as any).created) {
+              orderData.created = (data as any).created; // system or custom 'created'
+              // best-effort aliases for custom schemas (ignored if not present)
+              (orderData as any).created_at = (data as any).created;
+              (orderData as any).created_text = (data as any).created;
             }
+            // include shipping cost if available
+            if (typeof (data as any).shipping_cost !== 'undefined') {
+              orderData.shipping_cost = Number((data as any).shipping_cost) || 0;
+            }
+
+            // debug: verify payload fields before sending to PB
+            console.log('CreateOrder payload to PB:', {
+              created: orderData.created,
+              created_at: (orderData as any).created_at,
+              created_text: (orderData as any).created_text,
+              shipping_cost: orderData.shipping_cost,
+              subtotal: orderData.subtotal,
+              total: orderData.total,
+            });
 
             await createOrder.mutateAsync(orderData as any);
           } catch (err) {

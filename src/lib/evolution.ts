@@ -89,13 +89,25 @@ export const sendWhatsAppMessage = async (data: SendMessageRequest) => {
     // Add timestamp for debugging
     console.time('whatsapp-message-request');
     
-    const response = await fetch(`${base}/api/evolution/messages`, {
+    const primaryUrl = `${base}/api/evolution/messages`;
+    let response = await fetch(primaryUrl, {
       method: 'POST',
       body: JSON.stringify(requestData),
       headers: {
         'Content-Type': 'application/json',
       },
     });
+    // Fallback: try Netlify Functions path if 404 or dev base is empty
+    if (response.status === 404 || (!base && response.status >= 400)) {
+      const fallbackUrl = `/.netlify/functions/api/evolution/messages`;
+      try {
+        response = await fetch(fallbackUrl, {
+          method: 'POST',
+          body: JSON.stringify(requestData),
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch {}
+    }
     
     console.timeEnd('whatsapp-message-request');
 
@@ -136,13 +148,25 @@ export const sendWhatsAppMediaMessage = async (data: SendMediaMessageRequest) =>
     // Add timestamp for debugging
     console.time('whatsapp-media-request');
     
-    const response = await fetch(`${base}/api/evolution/media`, {
+    const primaryUrl = `${base}/api/evolution/media`;
+    let response = await fetch(primaryUrl, {
       method: 'POST',
       body: JSON.stringify(requestData),
       headers: {
         'Content-Type': 'application/json',
       },
     });
+    // Fallback: try Netlify Functions path if 404 or dev base is empty
+    if (response.status === 404 || (!base && response.status >= 400)) {
+      const fallbackUrl = `/.netlify/functions/api/evolution/media`;
+      try {
+        response = await fetch(fallbackUrl, {
+          method: 'POST',
+          body: JSON.stringify(requestData),
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch {}
+    }
     
     console.timeEnd('whatsapp-media-request');
     

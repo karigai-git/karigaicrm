@@ -127,8 +127,12 @@ export function CreateOrderDialog({
         notes: values.notes,
         products: productsJson,
       } as CreateOrderData as any;
-      // add shipping to a schema-compatible field used elsewhere in app
-      (orderData as any).shipping_fee = Number((shippingAmount || 0).toFixed(2));
+      // add shipping_cost to align with backend schema
+      (orderData as any).shipping_cost = Number((shippingAmount || 0).toFixed(2));
+      // include created timestamp formatted as 'YYYY-MM-DD HH:mm:ss.SSSZ'
+      const iso = new Date().toISOString(); // e.g., 2025-09-06T07:20:30.123Z
+      const pbCreated = iso.replace('T', ' '); // 2025-09-06 07:20:30.123Z
+      (orderData as any).created = pbCreated;
       await onSubmit(orderData);
       form.reset();
       onOpenChange(false);
@@ -320,7 +324,7 @@ export function CreateOrderDialog({
             {/* Shipping and totals */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <FormLabel>Shipping Amount</FormLabel>
+                <FormLabel>Shipping Cost</FormLabel>
                 <Input
                   type="number"
                   step="0.01"

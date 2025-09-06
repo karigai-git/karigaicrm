@@ -42,6 +42,22 @@ import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Card, CardContent } from "@/components/ui/card";
 import { updateOrderTrackingAndShip } from "@/lib/pocketbase";
 
+// Safe date utilities to avoid "Invalid time value"
+const toValidDate = (value: unknown): Date | null => {
+  try {
+    if (!value) return null;
+    const d = new Date(String(value));
+    return isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+};
+
+const safeFormat = (value: unknown, fmt = "dd MMM yyyy"): string => {
+  const d = toValidDate(value);
+  return d ? format(d, fmt) : String(value || "Unknown");
+};
+
 // Keep types exactly the same
 export type OrderStatus =
   | "pending"
@@ -205,7 +221,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
           escape((o as any).total ?? ""),
           escape((o as any).tracking_code ?? ""),
           escape((o as any).tracking_url ?? ""),
-          escape(format(new Date(o.created), "yyyy-MM-dd HH:mm")),
+          escape(safeFormat(o.created, "yyyy-MM-dd HH:mm")),
         ].join(",")
       );
     }
@@ -532,8 +548,8 @@ export const OrdersTable: FC<OrdersTableProps> = ({
           )}
           {dateRange?.from && (
             <Badge variant="secondary">
-              Date: {format(dateRange.from!, "dd MMM yyyy")} {" "}
-              {dateRange?.to && ` - ${format(dateRange.to, "dd MMM yyyy")}`}
+              Date: {safeFormat(dateRange.from!, "dd MMM yyyy")} {" "}
+              {dateRange?.to && ` - ${safeFormat(dateRange.to, "dd MMM yyyy")}`}
             </Badge>
           )}
         </div>
@@ -611,7 +627,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                     </div>
 
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      {format(new Date(order.created), "dd MMM yyyy")} • ₹
+                      {safeFormat(order.created, "dd MMM yyyy")} • ₹
                       {order.total?.toFixed(2) || "0.00"}
                     </div>
 
@@ -778,7 +794,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                     ₹{order.total?.toFixed(2) || "0.00"}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {format(new Date(order.created), "dd MMM yyyy")}
+                    {safeFormat(order.created, "dd MMM yyyy")}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-1">

@@ -287,5 +287,10 @@ export const getImageUrl = (collectionId: string, recordId: string, fileName: st
     console.warn('Missing parameters for getImageUrl', { collectionId, recordId, fileName });
     return 'https://placehold.co/400x400/e2e8f0/64748b?text=No+Image';
   }
-  return `${import.meta.env.VITE_POCKETBASE_URL}/api/files/${collectionId}/${recordId}/${fileName}`;
+  const envBase = import.meta.env.VITE_POCKETBASE_URL as string | undefined;
+  const fallbackEnv = (import.meta.env.VITE_PB_FALLBACK_URL as string | undefined) || (import.meta.env.PUBLIC_PB_URL as string | undefined);
+  // Last-resort hardcoded fallback (update if backend host changes)
+  const hardcoded = 'https://backend-pocketbase.p3ibd8.easypanel.host';
+  const base = envBase || fallbackEnv || hardcoded;
+  return `${base}/api/files/${collectionId}/${recordId}/${fileName}`;
 };
