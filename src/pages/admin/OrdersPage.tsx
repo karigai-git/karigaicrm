@@ -29,11 +29,20 @@ const OrdersPage: React.FC = () => {
     if (!orders) return [];
     const q = query.trim().toLowerCase();
     if (!q) return orders;
-    return orders.filter((o: any) =>
-      [o?.id, o?.status, o?.user?.email, o?.user?.name]
-        .filter(Boolean)
-        .some((v: string) => String(v).toLowerCase().includes(q))
-    );
+    return orders.filter((o: any) => {
+      const fields = [
+        o?.id,
+        o?.status,
+        // legacy user relation fields (may not exist)
+        o?.user?.email,
+        o?.user?.name,
+        // direct customer fields used by CreateOrderDialog
+        o?.customer_name,
+        o?.customer_email,
+        o?.customer_phone,
+      ].filter(Boolean);
+      return fields.some((v: string) => String(v).toLowerCase().includes(q));
+    });
   }, [orders, query]);
 
   if (error) {
@@ -133,15 +142,33 @@ const OrdersPage: React.FC = () => {
         onOpenChange={setIsCreateDialogOpen}
         onSubmit={async (data: any) => {
           try {
-            // Convert data to match the CreateOrderData type from useOrders.ts
-            const orderData = {
-              user_id: "", // Will be filled by backend
-              status: data.status || "pending",
-              total_amount: data.totalAmount || 0,
-              shipping_address: data.shipping_address_text,
-              items: data.products ? JSON.parse(data.products) : [],
+            // Build a payload compatible with the PocketBase orders collection
+            // Avoid sending `shipping_address` relation with a text value
+            const orderData: any = {
+              // basic customer info
+              customer_name: data.customer_name || '',
+              customer_email: data.customer_email || '',
+              customer_phone: data.customer_phone || '',
+              // status & payment
+              status: data.status || 'pending',
+              payment_status: data.payment_status || 'pending',
+              // amounts
+              subtotal: Number(data.subtotal ?? 0),
+              total: Number(data.total ?? data.totalAmount ?? 0),
+              totalAmount: Number(data.totalAmount ?? data.total ?? 0),
+              // address text only (no relation id)
+              shipping_address_text: data.shipping_address_text || '',
+              // optional notes
+              notes: data.notes || '',
+              // products JSON from dialog
+              products: data.products || '[]',
             };
-            await createOrder.mutateAsync(orderData);
+            // include shipping fee if available
+            if (typeof (data as any).shipping_fee !== 'undefined') {
+              orderData.shipping_fee = Number((data as any).shipping_fee) || 0;
+            }
+
+            await createOrder.mutateAsync(orderData as any);
           } catch (err) {
             console.error("Failed to create order:", err);
           }

@@ -416,7 +416,7 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                           </div>
                           <div className="md:col-span-3 flex flex-col justify-between">
                             <div>
-                              <h4 className="font-medium text-base">{product.product?.name || "Unknown Product"}</h4>
+                              <h4 className="font-medium text-base">{product.product?.name || (product as any).name || "Unknown Product"}</h4>
                               {product.color && (
                                 <span className="text-sm text-muted-foreground">Color: {product.color}</span>
                               )}
@@ -431,11 +431,11 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Price</span>
-                                <p className="font-medium">₹{product.product?.price?.toFixed(2) || "0.00"}</p>
+                                <p className="font-medium">₹{((product.product?.price ?? (product as any).price ?? 0) as number).toFixed(2)}</p>
                               </div>
                               <div>
                                 <span className="text-muted-foreground">Subtotal</span>
-                                <p className="font-medium">₹{((product.product?.price || 0) * product.quantity).toFixed(2)}</p>
+                                <p className="font-medium">₹{(((product.product?.price ?? (product as any).price ?? 0) as number) * (product.quantity || 0)).toFixed(2)}</p>
                               </div>
                             </div>
                           </div>

@@ -385,7 +385,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
       {/* Top controls */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search orders, customer, email…"
@@ -674,8 +674,8 @@ export const OrdersTable: FC<OrdersTableProps> = ({
       </div>
 
       {/* DESKTOP/TABLET: Keep original table UX */}
-      <div className="hidden sm:block border rounded-md">
-        <Table>
+      <div className="hidden sm:block border rounded-md overflow-x-auto">
+        <Table className="w-full min-w-[1100px]">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[30px]">
@@ -687,13 +687,13 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                   onCheckedChange={toggleSelectAll}
                 />
               </TableHead>
-              <TableHead className="w-[100px]">Order ID</TableHead>
+              <TableHead className="w-[140px]">Order ID</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead className="w-[120px]">Actions</TableHead>
+              <TableHead className="w-[160px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -757,7 +757,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                       defaultValue={order.status as OrderStatus}
                       onValueChange={(val) => handleStatusChange(order, val)}
                     >
-                      <SelectTrigger className="w-[180px] h-8">
+                      <SelectTrigger className="w-[220px] h-8">
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>

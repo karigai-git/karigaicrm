@@ -28,15 +28,16 @@ export function useOrders() {
       try {
         await ensureAdminAuth();
         console.log('Fetching orders...');
-        const records = await pb.collection('orders').getList(1, 100, {
+        // Load all orders so old/backdated records also appear in client search
+        const fullList = await pb.collection('orders').getFullList({
           sort: '-created',
           expand: 'user_id,shipping_address,items',
         });
-        console.log('Fetched orders:', records);
+        console.log('Fetched orders count:', fullList.length);
 
         return {
-          items: records.items as Order[],
-          totalItems: records.totalItems,
+          items: fullList as unknown as Order[],
+          totalItems: fullList.length,
         };
       } catch (error) {
         console.error('Error fetching orders:', error);
@@ -62,35 +63,16 @@ export function useOrders() {
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       toast.success('Order created successfully');
       
-      // Send WhatsApp order confirmation if customer phone is available
+      // Send WhatsApp order confirmation if customer phone is available (no item fetch to avoid 400 logs)
       try {
         const order = data as unknown as Order;
         if (order && order.customer_phone) {
-          // Get order items to include in the confirmation
-          pb.collection('order_items').getList(1, 100, {
-            filter: `order_id="${order.id}"`,
-            expand: 'product_id'
-          }).then(itemsData => {
-            // Create properly typed items array with product information
-            const items = itemsData.items.map(item => {
-              const product = item.expand?.product_id as unknown as Product;
-              return {
-                id: item.id,
-                name: product ? product.name : 'Unknown Product',
-                price: typeof item.price === 'number' ? item.price : parseFloat(item.price as string) || 0,
-                quantity: typeof item.quantity === 'number' ? item.quantity : parseInt(item.quantity as string) || 1,
-                image: product && product.images && product.images.length > 0 ? product.images[0] : undefined
-              };
-            });
-            
-            // Send WhatsApp order confirmation
-            const confirmationMessage = `🎉 *Order Confirmed* 🎉\n\nHi ${order.customer_name},\n\nYour order #${order.id.slice(0, 8)} has been confirmed!\n\nThank you for shopping with us.\n\nWe'll update you when your order ships.`;
-            sendWhatsAppMessage({
-              phone: order.customer_phone,
-              message: confirmationMessage,
-              orderId: order.id
-            }).catch(err => console.error('Failed to send WhatsApp confirmation:', err));
-          });
+          const confirmationMessage = `🎉 *Order Confirmed* 🎉\n\nHi ${order.customer_name},\n\nYour order #${order.id.slice(0, 8)} has been confirmed!\n\nThank you for shopping with us.\n\nWe'll update you when your order ships.`;
+          sendWhatsAppMessage({
+            phone: order.customer_phone,
+            message: confirmationMessage,
+            orderId: order.id,
+          }).catch(err => console.error('Failed to send WhatsApp confirmation:', err));
         }
       } catch (whatsappError) {
         console.error('Error sending WhatsApp notification:', whatsappError);
