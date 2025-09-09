@@ -31,6 +31,7 @@ import { CreateOrderData, Product } from '@/types/schema';
 import { useProducts } from '@/hooks/useProducts';
 import { Separator } from '@/components/ui/separator';
 import { X } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const formSchema = z.object({
   customer_name: z.string().min(1, 'Customer name is required'),
@@ -44,6 +45,7 @@ const formSchema = z.object({
   shipping_address_text: z.string().optional(),
   notes: z.string().optional(),
   products: z.string().default('[]'),
+  created_text: z.string().optional(),
 });
 
 type OrderFormValues = z.infer<typeof formSchema>;
@@ -63,6 +65,14 @@ export function CreateOrderDialog({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedItems, setSelectedItems] = useState<Array<{ product: Product; quantity: number }>>([]);
   const [shippingAmount, setShippingAmount] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
+  // Bulk create state
+  const [bulkInput, setBulkInput] = useState<string>('');
+  const [isBulkCreating, setIsBulkCreating] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ success: number; failed: number; errors: string[] }>({ success: 0, failed: 0, errors: [] });
+  // Paste-to-CSV helper state
+  const [rawPaste, setRawPaste] = useState<string>('');
+  const [pasteErrors, setPasteErrors] = useState<string[]>([]);
 
   // Load products for selection
   const { products, isLoading } = useProducts({ page: 1, perPage: 50, searchTerm, sort: '-created' });
@@ -71,11 +81,12 @@ export function CreateOrderDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       status: 'pending',
-      payment_status: 'pending',
+      payment_status: 'paid',
       products: '[]',
       total: 0,
       subtotal: 0,
       totalAmount: 0,
+      created_text: '',
     },
   });
 
@@ -107,6 +118,275 @@ export function CreateOrderDialog({
     return JSON.stringify(rows);
   };
 
+  // ---- PASTE-TO-CSV CONVERTER ----
+  const computeShippingByState = (addrLines: string[]) => {
+    const addr = addrLines.join(' ').toLowerCase();
+    if (addr.includes('tamil nadu') || addr.includes('tamilnadu')) return 50;
+    return 60;
+  };
+
+  const matchProduct = (name: string) => {
+    const q = name.trim().toLowerCase();
+    // exact match first
+    let found = products.find((p: Product) => (p.name || '').toLowerCase() === q);
+    if (found) return found;
+    // contains match
+    found = products.find((p: Product) => (p.name || '').toLowerCase().includes(q) || q.includes((p.name || '').toLowerCase()));
+    return found || null;
+  };
+
+  const convertPasteToCsv = () => {
+    try {
+      setPasteErrors([]);
+      const blocksRaw = rawPaste
+        .split(/\n{2,}/)
+        .map(b => b.split(/\n/).map(l => l.trim()).filter(Boolean))
+        .filter(b => b.length > 0);
+      if (blocksRaw.length === 0) {
+        setPasteErrors(['No content detected.']);
+        return;
+      }
+
+      const hasItem = (lines: string[]) => lines.some(l => /^(?:-\s*)?\d+\s+.+/i.test(l));
+
+      // Merge blocks when user added extra blank lines between address and items
+      const blocks: string[][] = [];
+      for (let i = 0; i < blocksRaw.length; i++) {
+        const cur = blocksRaw[i];
+        if (!hasItem(cur) && i + 1 < blocksRaw.length) {
+          const merged = [...cur, ...blocksRaw[i + 1]];
+          if (hasItem(merged)) {
+            blocks.push(merged);
+            i++; // skip next
+            continue;
+          }
+        }
+        blocks.push(cur);
+      }
+
+      const headers = [
+        'customer_name','customer_email','customer_phone','status','payment_status','subtotal','total','shipping_cost','shipping_address_text','products','notes','created'
+      ];
+      const rows: string[] = [headers.join(',')];
+      const errs: string[] = [];
+
+      const nowIso = new Date().toISOString().replace('T', ' ');
+      const csvEscape = (v: unknown) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+
+      blocks.forEach((lines, idx) => {
+        try {
+          let i = 0;
+          const name = lines[i++] || '';
+          // phone: next line with at least 10 digits
+          let phone = '';
+          while (i < lines.length && !/\d{10,}/.test(lines[i].replace(/\D/g, ''))) i++;
+          if (i < lines.length) {
+            phone = lines[i].replace(/\D/g, '');
+            i++;
+          }
+          // address lines until an item pattern appears
+          const addrLines: string[] = [];
+          while (i < lines.length && !/^(?:-\s*)?\d+\s+.+/i.test(lines[i])) {
+            addrLines.push(lines[i]);
+            i++;
+          }
+          // item lines
+          const items: { qty: number; name: string }[] = [];
+          while (i < lines.length) {
+            const m = lines[i].match(/^(?:-\s*)?(\d+)\s+(.+)$/i);
+            if (m) {
+              items.push({ qty: parseInt(m[1], 10) || 1, name: m[2].trim() });
+            }
+            i++;
+          }
+
+          if (items.length === 0) {
+            throw new Error('No items detected. Tip: lines like "1 charcoal soap" or "- 1 charcoal soap" are recognized as items.');
+          }
+
+          // build products JSON
+          const productRows: Array<{product_id: string; quantity: number; price: number; name: string}> = [];
+          let subtotal = 0;
+          items.forEach(it => {
+            const match = matchProduct(it.name);
+            if (match) {
+              const price = Number(match.price || 0);
+              productRows.push({ product_id: match.id, quantity: it.qty, price, name: match.name });
+              subtotal += price * it.qty;
+            } else {
+              errs.push(`Block ${idx + 1}: product not found -> "${it.name}"`);
+            }
+          });
+
+          const shipping = computeShippingByState(addrLines);
+          const totalCalc = subtotal + shipping;
+          const productsJson = JSON.stringify(productRows);
+
+          const csvRow = [
+            csvEscape(name),
+            '',
+            phone,
+            'pending',
+            'paid',
+            String(subtotal),
+            String(totalCalc),
+            String(shipping),
+            csvEscape(addrLines.join(' | ')),
+            csvEscape(productsJson),
+            csvEscape(addrLines.join(' | ')),
+            nowIso,
+          ].join(',');
+          rows.push(csvRow);
+        } catch (e: any) {
+          errs.push(`Block ${idx + 1}: ${e?.message || e}`);
+        }
+      });
+
+      if (errs.length) setPasteErrors(errs);
+      setBulkInput(rows.join('\n'));
+      setActiveTab('bulk');
+    } catch (e: any) {
+      setPasteErrors([e?.message || String(e)]);
+    }
+  };
+
+  // ---- SAMPLE CSV HELPERS ----
+  const generateSampleCsv = () => {
+    const headers = [
+      'customer_name','customer_email','customer_phone','status','payment_status','subtotal','total','shipping_cost','shipping_address_text','products','notes','created'
+    ].join(',');
+    const esc = (v: string) => '"' + v.replace(/"/g, '""') + '"';
+    const row1 = [
+      esc('John Doe'),'john@example.com','9912345678','processing','paid','200','220','20',
+      esc('Tharamangalam main road tholasampatty | Salem | Tamilnadu | 636503'),
+      esc(JSON.stringify({product_id:'abc123',quantity:1,price:200})),
+      esc('First order'),'2025-09-06 10:00:00.000Z'
+    ].join(',');
+    const row2 = [
+      esc('Jane Smith'),'jane@example.com','9987654321','pending','paid','150','170','20',
+      esc('Another street, City, State, 600001'),
+      esc(JSON.stringify({product_id:'xyz789',quantity:2,price:75})),
+      esc('Second order'),'2025-09-06 11:30:00.000Z'
+    ].join(',');
+    return `${headers}\n${row1}\n${row2}`;
+  };
+
+  const handleDownloadSample = () => {
+    const csv = generateSampleCsv();
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'orders_sample.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopySample = async () => {
+    try {
+      await navigator.clipboard.writeText(generateSampleCsv());
+    } catch {}
+  };
+
+  const handleFillSample = () => {
+    setBulkInput(generateSampleCsv());
+  };
+
+  // ---- BULK CREATE HELPERS ----
+  type BulkRow = Partial<{
+    customer_name: string;
+    customer_email: string;
+    customer_phone: string;
+    status: 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
+    payment_status: 'pending' | 'paid' | 'failed';
+    subtotal: string | number;
+    total: string | number;
+    shipping_cost: string | number;
+    shipping_address_text: string;
+    products: string; // JSON string
+    notes: string;
+    created: string; // expects 'YYYY-MM-DD HH:mm:ss.SSSZ' or similar
+  }>;
+
+  const parseBulkCSV = (text: string): BulkRow[] => {
+    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length === 0) return [];
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows: BulkRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.trim().replace(/^"|"$/g, ''));
+      const r: any = {};
+      headers.forEach((h, idx) => { r[h] = cols[idx]; });
+      rows.push(r as BulkRow);
+    }
+    return rows;
+  };
+
+  const normalizeCreated = (s?: string) => {
+    if (!s) return new Date().toISOString().replace('T', ' ');
+    // If already has 'T', convert to space
+    return s.includes('T') ? s.replace('T', ' ') : s;
+  };
+
+  const toNumber = (v: any, def = 0) => {
+    const n = Number(v);
+    return isNaN(n) ? def : n;
+  };
+
+  const handleBulkCreate = async () => {
+    try {
+      setIsBulkCreating(true);
+      setBulkResult({ success: 0, failed: 0, errors: [] });
+      const rows = parseBulkCSV(bulkInput);
+      if (rows.length === 0) return;
+
+      let success = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        try {
+          const productsJson = r.products && r.products.trim().startsWith('[') ? r.products : '[]';
+          const subtotal = toNumber(r.subtotal, 0);
+          const total = toNumber(r.total, subtotal + toNumber(r.shipping_cost, 0));
+          const payload: any = {
+            user: [],
+            customer_name: r.customer_name || '',
+            customer_email: r.customer_email || '',
+            customer_phone: r.customer_phone || '',
+            status: (r.status as any) || 'pending',
+            payment_status: (r.payment_status as any) || 'paid',
+            subtotal,
+            total,
+            totalAmount: total,
+            shipping_address_text: r.shipping_address_text || '',
+            notes: r.notes || '',
+            products: productsJson,
+          };
+          payload.shipping_cost = toNumber(r.shipping_cost, 0);
+          payload.created = normalizeCreated(r.created);
+          payload.created_text = payload.created;
+
+          await onSubmit(payload);
+          success++;
+        } catch (e: any) {
+          failed++;
+          errors.push(`Row ${i + 1}: ${e?.message || e}`);
+        }
+      }
+
+      setBulkResult({ success, failed, errors });
+      if (failed === 0) {
+        setBulkInput('');
+      }
+    } finally {
+      setIsBulkCreating(false);
+    }
+  };
+
   const handleSubmit = async (values: OrderFormValues) => {
     try {
       setIsSubmitting(true);
@@ -130,9 +410,12 @@ export function CreateOrderDialog({
       // add shipping_cost to align with backend schema
       (orderData as any).shipping_cost = Number((shippingAmount || 0).toFixed(2));
       // include created timestamp formatted as 'YYYY-MM-DD HH:mm:ss.SSSZ'
-      const iso = new Date().toISOString(); // e.g., 2025-09-06T07:20:30.123Z
-      const pbCreated = iso.replace('T', ' '); // 2025-09-06 07:20:30.123Z
-      (orderData as any).created = pbCreated;
+      const provided = (values as any).created_text as string | undefined;
+      const createdStr = provided && provided.trim().length > 0
+        ? provided
+        : new Date().toISOString().replace('T', ' ');
+      (orderData as any).created = createdStr;
+      (orderData as any).created_text = createdStr;
       await onSubmit(orderData);
       form.reset();
       onOpenChange(false);
@@ -145,16 +428,21 @@ export function CreateOrderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create New Order</DialogTitle>
-          <DialogDescription>
-            Add a new order to the system.
-          </DialogDescription>
+          <DialogTitle>Create Orders</DialogTitle>
+          <DialogDescription>Single or bulk create orders.</DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'single' | 'bulk')}>
+          <TabsList className="mb-4">
+            <TabsTrigger value="single">Single Order</TabsTrigger>
+            <TabsTrigger value="bulk">Bulk Orders</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="single">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <FormField
               control={form.control}
               name="customer_name"
@@ -376,20 +664,100 @@ export function CreateOrderDialog({
               )}
             />
 
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create Order'}
-              </Button>
+            <FormField
+              control={form.control}
+              name="created_text"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Order Created At (optional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      placeholder="2022-01-01 10:00:00.123Z"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating...' : 'Create Order'}
+                  </Button>
+                </div>
+              </form>
+            </Form>
+          </TabsContent>
+
+          <TabsContent value="bulk">
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Bulk Create (CSV or pasted rows)</div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" onClick={handleDownloadSample}>Download sample CSV</Button>
+                <Button type="button" variant="outline" onClick={handleCopySample}>Copy sample</Button>
+                <Button type="button" variant="ghost" onClick={handleFillSample}>Fill sample here</Button>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-medium">Paste order text</div>
+                <Textarea
+                  value={rawPaste}
+                  onChange={(e) => setRawPaste(e.target.value)}
+                  placeholder={`Example:\nKamalesh\n9345968120\nTharamangalam main road tholasampatty\nSalem\nTamilnadu\n636503\n\n1 charcoal soap\n1 neem comb`}
+                  className="min-h-[160px]"
+                />
+                <div className="flex items-center gap-2">
+                  <Button type="button" onClick={convertPasteToCsv} disabled={!rawPaste.trim()}>Convert pasted text to CSV</Button>
+                  {pasteErrors.length > 0 && (
+                    <div className="text-xs text-destructive">{pasteErrors.length} issues detected</div>
+                  )}
+                </div>
+                {pasteErrors.length > 0 && (
+                  <div className="rounded-md border p-2 text-xs text-destructive">
+                    {pasteErrors.slice(0, 5).map((er, i) => <div key={i}>{er}</div>)}
+                    {pasteErrors.length > 5 && <div>…and {pasteErrors.length - 5} more</div>}
+                  </div>
+                )}
+              </div>
+              <Textarea
+                value={bulkInput}
+                onChange={(e) => setBulkInput(e.target.value)}
+                placeholder={'Headers required: customer_name,customer_email,customer_phone,status,payment_status,subtotal,total,shipping_cost,products,notes,created\nExample:\nJohn,john@mail.com,9912345678,paid,paid,200,220,20,[],,2025-09-06 10:00:00.000Z'}
+                className="min-h-[220px]"
+              />
+
+              <div className="text-xs text-muted-foreground">
+                Expected headers: <code>customer_name, customer_email, customer_phone, status, payment_status, subtotal, total, shipping_cost, products, notes, created</code>
+                {' '}• products must be a JSON array string like <code>{'[{"product_id":"abc","quantity":1,"price":99}]'}</code>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="secondary" onClick={handleBulkCreate} disabled={isBulkCreating || !bulkInput.trim()}>
+                  {isBulkCreating ? 'Creating…' : 'Create Bulk Orders'}
+                </Button>
+                {(bulkResult.success + bulkResult.failed) > 0 && (
+                  <div className="text-xs">
+                    <span className="font-medium">Result:</span> {bulkResult.success} success, {bulkResult.failed} failed
+                  </div>
+                )}
+                <div className="flex-1" />
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+              </div>
+              {bulkResult.errors.length > 0 && (
+                <div className="rounded-md border p-2 text-xs text-destructive">
+                  {bulkResult.errors.slice(0, 5).map((err, idx) => (
+                    <div key={idx}>{err}</div>
+                  ))}
+                  {bulkResult.errors.length > 5 && (
+                    <div>…and {bulkResult.errors.length - 5} more</div>
+                  )}
+                </div>
+              )}
             </div>
-          </form>
-        </Form>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
