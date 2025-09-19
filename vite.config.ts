@@ -126,6 +126,22 @@ export default defineConfig(({ mode }) => {
           });
         }
       },
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy) => {
+          proxy.on('error', (err: Error) => {
+            console.log('API proxy error:', err);
+          });
+          proxy.on('proxyReq', (proxyReq: ClientRequest, req: IncomingMessage) => {
+            console.log('Sending API Request:', req.method, req.url);
+          });
+          proxy.on('proxyRes', (proxyRes: IncomingMessage, req: IncomingMessage) => {
+            console.log('Received API Response:', proxyRes.statusCode, req.url);
+          });
+        }
+      },
     };
   }
 
