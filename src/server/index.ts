@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import webpush from 'web-push';
 import emailRoutes from '../api/email';
 import evolutionRoutes from './evolutionService';
+import customerJourneyRoutes from '../api/customerJourney';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -66,6 +67,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/email', emailRoutes);
 app.use('/evolution', evolutionRoutes);
+app.use('/api', customerJourneyRoutes);
 
 // In-memory store for push subscriptions
 const subscriptions: webpush.PushSubscription[] = [];

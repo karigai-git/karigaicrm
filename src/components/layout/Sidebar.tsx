@@ -11,7 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  Mail
+  Mail,
+  MapPin
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -66,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
     { title: 'Customers', path: '/admin/customers', icon: Users },
     { title: 'Products', path: '/admin/products', icon: Package },
     { title: 'Payments', path: '/admin/payments', icon: CreditCard },
+    { title: 'Customer Journey', path: '/admin/customer-journey', icon: MapPin },
     { title: 'Campaigns', path: '/admin/campaigns', icon: MessageSquare },
     { title: 'WhatsApp Activities', path: '/admin/whatsapp', icon: MessageSquare },
     { title: 'WhatsApp Templates', path: '/admin/whatsapp-templates', icon: MessageSquare },

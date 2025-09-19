@@ -15,6 +15,7 @@ import WhatsAppActivitiesPage from "./pages/admin/WhatsAppActivitiesPage";
 import WhatsAppTemplatesPage from "./pages/admin/WhatsAppTemplatesPage";
 import EmailActivitiesPage from "./pages/admin/EmailActivitiesPage";
 import EmailTemplatesPage from "./pages/admin/EmailTemplatesPage";
+import CustomerJourneyPage from "./pages/admin/CustomerJourneyPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 import CampaignsPage from "./pages/admin/CampaignsPage";
@@ -77,6 +78,7 @@ const App = () => {
             <Route path="/admin/whatsapp-templates" element={<WhatsAppTemplatesPage />} />
             <Route path="/admin/email" element={<EmailActivitiesPage />} />
             <Route path="/admin/email-templates" element={<EmailTemplatesPage />} />
+            <Route path="/admin/customer-journey" element={<CustomerJourneyPage />} />
             <Route path="/admin/campaigns" element={<CampaignsPage />} />
             
             {/* Catch-all route */}
