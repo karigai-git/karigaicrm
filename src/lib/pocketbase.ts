@@ -1,7 +1,7 @@
 import PocketBase from 'pocketbase';
 
 // Initialize PocketBase with the URL from environment variables
-export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL);
+export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL || 'https://backend-pocketbase.7za6uc.easypanel.host');
 
 // Disable auto-cancellation of requests which is causing issues
 pb.autoCancellation(false);
