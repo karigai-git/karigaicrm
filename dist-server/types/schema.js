@@ -1,0 +1,2 @@
+// PocketBase Schema Types
+export {};
