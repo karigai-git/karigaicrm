@@ -19,7 +19,7 @@ import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { useWhatsAppActivities } from "@/hooks/useWhatsAppActivities";
 import { WhatsAppActivities } from "@/components/orders/WhatsAppActivities";
 import { SendWhatsAppMessage } from "@/components/orders/SendWhatsAppMessage";
-import { MessageSquare, Printer, PencilLine, Check, X } from "lucide-react";
+import { MessageSquare, Printer, PencilLine, Check, X, Trash2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,7 +52,7 @@ interface ProductItem {
 
 export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogProps) {
   const queryClient = useQueryClient();
-  const { updateOrder } = useOrders();
+  const { updateOrder, deleteOrder } = useOrders();
 
   const orderStatusVariant: Record<string, BadgeVariant> = {
     pending: "warning",
@@ -79,6 +79,10 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
     status: "pending",
     payment_status: "pending",
   });
+  
+  // Products normalizer + fallback fetch by product_id
+  const [rawRows, setRawRows] = useState<any[]>([]);
+  const [byId, setById] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (order) {
@@ -91,10 +95,18 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
         status: order.status || "pending",
         payment_status: order.payment_status || "pending",
       });
+      
+      // Parse products when order changes
+      const parsedProducts = parseProducts(order);
+      setRawRows(parsedProducts);
+      
+      // Fetch products by ID
+      const ids = Array.from(new Set(parsedProducts.map(r => (r as any).product_id).filter(Boolean))) as string[];
+      if (ids.length > 0) {
+        fetchProducts(ids);
+      }
     }
   }, [order]);
-
-  if (!order) return null;
 
   const handleSave = () => {
     updateOrder.mutate({
@@ -110,6 +122,18 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
       },
     });
     setIsEditing(false);
+  };
+
+  const handleDelete = () => {
+    if (!order) return;
+    const ok = window.confirm("Delete this order? This action cannot be undone.");
+    if (!ok) return;
+    deleteOrder.mutate(order.id, {
+      onSuccess: () => {
+        onOpenChange(false);
+        // orders list invalidation handled inside hook
+      },
+    });
   };
 
   // ===== Address formatter =====
@@ -149,11 +173,12 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
     }
   };
 
-  // ===== Products normalizer + fallback fetch by product_id =====
+  // ===== Products normalizer helper function =====
   type RawRow = Partial<{ product_id: string; quantity: number; price: number; name?: string; product?: any }>
-  const parseProducts = (): RawRow[] => {
+  const parseProducts = (orderData: Order | null): RawRow[] => {
+    if (!orderData) return [];
     try {
-      const raw = order.products as any;
+      const raw = orderData.products as any;
       if (!raw) return [];
       if (Array.isArray(raw)) return raw as RawRow[];
       if (typeof raw === "object") return [raw as RawRow];
@@ -171,20 +196,15 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
       }
       return [];
     } catch (e) {
-      console.error("Failed to parse products", e, order.products);
+      console.error("Failed to parse products", e, orderData.products);
       return [];
     }
   };
-
-  const [rawRows, setRawRows] = useState<RawRow[]>([]);
-  const [byId, setById] = useState<Record<string, any>>({});
-
-  useEffect(() => {
-    const rows = parseProducts();
-    setRawRows(rows);
-    const ids = Array.from(new Set(rows.map(r => r.product_id).filter(Boolean))) as string[];
+  
+  // Helper function to fetch products by IDs
+  const fetchProducts = async (ids: string[]) => {
     if (ids.length === 0) return;
-    (async () => {
+    try {
       const fetched: Record<string, any> = {};
       await Promise.all(ids.map(async (id) => {
         try {
@@ -195,13 +215,14 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
         }
       }));
       setById(prev => ({ ...prev, ...fetched }));
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [order.id]);
+    } catch (e) {
+      console.error('Error fetching products:', e);
+    }
+  };
 
   const products: ProductItem[] = useMemo(() => {
     // If existing structure already provided with product object, trust it
-    if (Array.isArray((order as any).products) && (order as any).products.every((r: any) => r?.product)) {
+    if (order && Array.isArray((order as any).products) && (order as any).products.every((r: any) => r?.product)) {
       return (order as any).products as ProductItem[];
     }
     return rawRows.map((r) => ({
@@ -253,13 +274,15 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
 
   // ===== Shipping fee (robust derivation) =====
   const shippingFee = (() => {
-    const rec = order as unknown as Record<string, unknown>;
+    if (!order) return 0;
+    const rec = (order as unknown as Record<string, unknown>) || {};
     const raw = (rec["shipping_fee"] ?? rec["shipping_cost"] ?? rec["shippingCost"] ?? 0) as unknown;
     const num = typeof raw === "string" ? parseFloat(raw) : Number(raw);
     return Number.isFinite(num) ? num : 0;
   })();
 
   // ===== UI =====
+  if (!order) return null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full h-dvh max-w-full sm:max-w-3xl sm:h-[90vh] rounded-none sm:rounded-xl p-0 overflow-hidden flex flex-col">
@@ -281,6 +304,10 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
               <Badge variant={paymentStatusVariant[form.payment_status] || "outline"} className="px-2 py-1 text-xs">
                 Payment: {form.payment_status.replace(/^(.)/, (c) => c.toUpperCase())}
               </Badge>
+              {/* Delete Order */}
+              <Button size="sm" variant="destructive" onClick={handleDelete} disabled={deleteOrder.isPending}>
+                <Trash2 className="h-4 w-4 mr-1" /> {deleteOrder.isPending ? "Deleting..." : "Delete"}
+              </Button>
               {!isEditing ? (
                 <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
                   <PencilLine className="h-4 w-4 mr-1" /> Edit

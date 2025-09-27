@@ -7,7 +7,7 @@ import {
   DialogTitle,
   DialogFooter
 } from '@/components/ui/dialog';
-import {
+import { 
   Tabs,
   TabsContent,
   TabsList,
@@ -41,28 +41,19 @@ interface OrderDetailsModalProps {
 }
 
 // WhatsApp Activities Tab Component
-function WhatsAppActivitiesTab({ orderId, order }: { orderId: string, order: Order }) {
-  const { activities, isLoading, createActivity } = useWhatsAppActivities(orderId);
-  
+function WhatsAppActivitiesTab({ orderId, order }: { orderId: string; order: Order }) {
+  const { activities, isLoading } = useWhatsAppActivities(orderId);
   const handleMessageSent = () => {
-    // This will trigger a refetch of the activities
-    // through the invalidation in the createActivity mutation
+    // no-op: mutation hook in SendEvolutionMessage handles refetch via invalidation
   };
-  
   return (
     <div className="space-y-6">
       <SendEvolutionMessage order={order} onMessageSent={handleMessageSent} />
-      
-      {/* WhatsApp Activity History Section */}
       <div className="border rounded-md p-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium">Message History</h3>
         </div>
-        <WhatsAppActivities 
-          activities={activities} 
-          isLoading={isLoading} 
-          orderId={orderId} 
-        />
+        <WhatsAppActivities activities={activities} isLoading={isLoading} orderId={orderId} />
       </div>
     </div>
   );
@@ -110,6 +101,11 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
 
   // Load rows from either expanded items or products JSON
   useEffect(() => {
+    if (!order) {
+      setRows([]);
+      setProductsById({});
+      return;
+    }
     const expandedItems = (order.expand as any)?.items as any[] | undefined;
     if (expandedItems && expandedItems.length > 0) {
       const mapped: OrderProductRow[] = expandedItems.map((it: any) => ({
@@ -221,10 +217,10 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                         {displayName}
                       </button>
                       <div className="text-sm text-gray-500">
-                        {item.quantity} x ₹{Number(item.price || 0).toFixed(2)}
+                        {item.quantity} x â‚¹{Number(item.price || 0).toFixed(2)}
                       </div>
                     </div>
-                    <div className="text-right font-medium">₹{total.toFixed(2)}</div>
+                    <div className="text-right font-medium">â‚¹{total.toFixed(2)}</div>
                   </div>
                 );
               }) : (
@@ -236,12 +232,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span>₹{Number(order?.subtotal || 0).toFixed(2)}</span>
+                  <span>â‚¹{Number(order?.subtotal || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Shipping</span>
                   <span>
-                    ₹{
+                    â‚¹{
                       (() => {
                         const rec = (order || {}) as Record<string, unknown>;
                         const raw = (rec['shipping_fee'] ?? rec['shipping_cost'] ?? rec['shippingCost'] ?? 0) as unknown;
@@ -253,18 +249,18 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax</span>
-                  <span>₹{Number(order?.tax || 0).toFixed(2)}</span>
+                  <span>â‚¹{Number(order?.tax || 0).toFixed(2)}</span>
                 </div>
                 {Number(order?.discount || 0) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Discount</span>
-                    <span className="text-green-600">-₹{Number(order?.discount || 0).toFixed(2)}</span>
+                    <span className="text-green-600">-â‚¹{Number(order?.discount || 0).toFixed(2)}</span>
                   </div>
                 )}
                 <Separator />
                 <div className="flex justify-between font-medium">
                   <span>Total</span>
-                  <span>₹{Number(order?.total || 0).toFixed(2)}</span>
+                  <span>â‚¹{Number(order?.total || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -378,7 +374,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               <div className="mt-4">
                 <div className="mb-4">
                   <Label className="text-xs text-gray-500">Current Status</Label>
-                  <p className="font-medium capitalize">{order.status}</p>
+                  <p className="font-medium capitalize">{order?.status || 'N/A'}</p>
                 </div>
                 
                 <div>
@@ -417,13 +413,13 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
               </div>
             </div>
             
-            {order.notes && (
+            {order?.notes && (
               <div className="border rounded-md p-4">
                 <h3 className="text-sm font-medium mb-2 flex items-center">
                   <FileText size={16} className="mr-2 text-gray-500" />
                   Order Notes
                 </h3>
-                <p className="text-sm mt-2">{order.notes}</p>
+                <p className="text-sm mt-2">{order?.notes}</p>
               </div>
             )}
           </TabsContent>
@@ -451,7 +447,7 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
                 </div>
                 <div>
                   <Label className="text-xs text-gray-500">Amount</Label>
-                  <p>₹{Number(order?.total || 0).toFixed(2)}</p>
+                  <p>â‚¹{Number(order?.total || 0).toFixed(2)}</p>
                 </div>
               </div>
             </div>
@@ -499,8 +495,12 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
           
           {/* WhatsApp tab */}
           <TabsContent value="whatsapp" className="space-y-4">
-            <WhatsAppActivitiesTab orderId={order.id} order={order} />
-          </TabsContent>
+  {order ? (
+    <WhatsAppActivitiesTab orderId={order.id} order={order} />
+  ) : (
+    <div className="text-sm text-muted-foreground">No order selected</div>
+  )}
+</TabsContent>
         </Tabs>
         
         <DialogFooter>
@@ -516,4 +516,5 @@ export const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
     </Dialog>
   );
 }
+
 
