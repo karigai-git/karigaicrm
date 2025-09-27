@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrders } from "@/hooks/useOrders";
-import { getImageUrl as pbGetImageUrl } from "@/lib/pocketbase";
+import { getImageUrl as pbGetImageUrl, pb } from "@/lib/pocketbase";
 
 // ===== Types =====
 export type BadgeVariant = "default" | "destructive" | "outline" | "secondary" | "success" | "warning";
@@ -149,20 +149,72 @@ export function ViewOrderDialog({ open, onOpenChange, order }: ViewOrderDialogPr
     }
   };
 
-  // ===== Products normalizer =====
-  let products: ProductItem[] = [];
-  try {
-    const raw = order.products as any;
-    if (typeof raw === "string") {
-      if (raw && raw !== "[object Object]") products = JSON.parse(raw);
-    } else if (Array.isArray(raw)) {
-      products = raw;
-    } else if (raw && typeof raw === "object") {
-      products = [raw];
+  // ===== Products normalizer + fallback fetch by product_id =====
+  type RawRow = Partial<{ product_id: string; quantity: number; price: number; name?: string; product?: any }>
+  const parseProducts = (): RawRow[] => {
+    try {
+      const raw = order.products as any;
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw as RawRow[];
+      if (typeof raw === "object") return [raw as RawRow];
+      if (typeof raw === "string") {
+        let s = raw.trim();
+        if (s === "[object Object]") return [];
+        // If quoted string, try to JSON.parse once to unwrap
+        if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+          try { s = JSON.parse(s); } catch { s = s.slice(1, -1); }
+        }
+        // Collapse CSV-doubled quotes
+        if (/""/.test(s)) s = s.replace(/""/g, '"');
+        const arr = JSON.parse(s);
+        return Array.isArray(arr) ? (arr as RawRow[]) : [];
+      }
+      return [];
+    } catch (e) {
+      console.error("Failed to parse products", e, order.products);
+      return [];
     }
-  } catch (e) {
-    console.error("Failed to parse products", e);
-  }
+  };
+
+  const [rawRows, setRawRows] = useState<RawRow[]>([]);
+  const [byId, setById] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    const rows = parseProducts();
+    setRawRows(rows);
+    const ids = Array.from(new Set(rows.map(r => r.product_id).filter(Boolean))) as string[];
+    if (ids.length === 0) return;
+    (async () => {
+      const fetched: Record<string, any> = {};
+      await Promise.all(ids.map(async (id) => {
+        try {
+          const rec = await pb.collection('products').getOne(id);
+          fetched[id] = rec;
+        } catch (e) {
+          console.warn('Failed to fetch product', id, e);
+        }
+      }));
+      setById(prev => ({ ...prev, ...fetched }));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order.id]);
+
+  const products: ProductItem[] = useMemo(() => {
+    // If existing structure already provided with product object, trust it
+    if (Array.isArray((order as any).products) && (order as any).products.every((r: any) => r?.product)) {
+      return (order as any).products as ProductItem[];
+    }
+    return rawRows.map((r) => ({
+      productId: String(r.product_id || ''),
+      quantity: Number(r.quantity || 0),
+      product: byId[String(r.product_id || '')] || {
+        id: r.product_id,
+        name: (r as any).name || 'Unknown Product',
+        price: Number(r.price || 0),
+        images: [],
+      },
+    })) as ProductItem[];
+  }, [rawRows, byId, order]);
 
   const safeFormatDate = (dateString?: string) => {
     if (!dateString) return "Unknown";
