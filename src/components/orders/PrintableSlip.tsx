@@ -75,7 +75,7 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layou
     // 3) Handle 'products' when it's already an array
     if (Array.isArray(order?.products) && order.products.length > 0) {
       order.products.forEach((it: any) => {
-        const name = it?.name || it?.product?.name || it?.title || 'Item';
+        const name = it?.name || (typeof it?.product === 'string' ? it.product : it?.product?.name) || it?.title || 'Item';
         const qty = it?.quantity ?? it?.qty ?? 1;
         // Prefer explicit item.price, else fall back to product.price/original_price
         const price = it?.price ?? it?.unitPrice ?? it?.product?.price ?? it?.product?.original_price ?? 0;
@@ -88,25 +88,65 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layou
     const prod = order?.products;
     if (typeof prod === 'string' && prod.trim()) {
       const t = prod.trim();
+      // First, try to normalize doubled quotes patterns like ""key"": and ""value""
+      const normalizeDoubledQuotes = (str: string) =>
+        str
+          .replace(/\\"{2}/g, '\\"') // \"\" => \"
+          .replace(/"{2}([^"])/g, '"$1') // ""X => "X
+          .replace(/([^\\])"{2}/g, '$1"'); // X"" => X"
       // JSON array case
       if ((t.startsWith('[') && t.endsWith(']')) || (t.startsWith('{') && t.endsWith('}'))) {
         try {
-          const parsed = JSON.parse(t);
+          const normalized = normalizeDoubledQuotes(t);
+          const parsed = JSON.parse(normalized);
           const arr = Array.isArray(parsed) ? parsed : [parsed];
           arr.forEach((it: any) => {
-            const name = it?.name || it?.title || it?.product || 'Item';
+            const name = it?.name || it?.title || (typeof it?.product === 'string' ? it.product : it?.product?.name) || 'Item';
             const qty = it?.quantity ?? it?.qty ?? 1;
             const price = it?.price ?? it?.unitPrice ?? 0;
             pushRow(name, qty, price, it?.total);
           });
           if (rows.length > 0) return rows;
         } catch {
-          // ignore and fall through
+          // ignore and fall through to relaxed parsing
         }
       }
-      // Fallback: comma-separated summary string -> single line
-      pushRow(t, 1, order?.subtotal || 0, order?.subtotal || 0);
+      // Relaxed parser: try to find object-like segments and parse them
+      try {
+        const objects = t.match(/\{[^}]*\}/g) || [];
+        for (const seg of objects) {
+          let s = seg
+            .replace(/\\"/g, '"')        // unescape quotes
+            .replace(/'([^']*)'/g, '"$1"') // single to double quotes
+            .replace(/,\s*}/g, '}');        // remove trailing commas before }
+          s = normalizeDoubledQuotes(s);
+          try {
+            const it = JSON.parse(s);
+            const name = it?.name || it?.title || (typeof it?.product === 'string' ? it.product : it?.product?.name) || 'Item';
+            const qty = it?.quantity ?? it?.qty ?? 1;
+            const price = it?.price ?? it?.unitPrice ?? 0;
+            pushRow(name, qty, price, it?.total);
+          } catch {}
+        }
+        if (rows.length > 0) return rows;
+      } catch {}
+
+      // Heuristic extraction: find pairs (name|product) and quantity numbers
+      try {
+        const nameMatches = Array.from(t.matchAll(/"(?:name|product)"\s*:\s*"\s*([^"\n]+)\s*"/g));
+        const qtyMatches = Array.from(t.matchAll(/"quantity"\s*:\s*"?(\d+)/g));
+        const count = Math.max(nameMatches.length, qtyMatches.length);
+        for (let i = 0; i < count; i++) {
+          const nm = nameMatches[i]?.[1] || 'Item';
+          const qv = qtyMatches[i]?.[1] || '1';
+          pushRow(nm, Number(qv) || 1, 0, 0);
+        }
+        if (rows.length > 0) return rows;
+      } catch {}
+
+      // If still not parsable, skip items rendering
       return rows;
+      
     }
 
     return rows; // possibly empty
@@ -158,6 +198,13 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layou
               return Number.isFinite(num) ? num : 0;
             })();
             
+            // resolve items once and compute subtotal fallback
+            const items = resolveItems(order);
+            const fallbackSubtotal = items.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+            const effectiveSubtotal = typeof (order as any).subtotal === 'number' && (order as any).subtotal > 0
+              ? (order as any).subtotal
+              : fallbackSubtotal;
+
             return (
               <div key={order.id} className={`${getSlipStyles()} border-2 border-black flex flex-col font-sans text-xs overflow-hidden mb-0 mx-auto`}>
                 {/* Top Section: Tracking Info */}
@@ -194,62 +241,24 @@ export const PrintableSlip = forwardRef<HTMLDivElement, { orders: Order[]; layou
                   {/* Product Details (optional) */}
                   {!hideDetails && (
                     <div className="border-t border-b border-dashed py-1 my-1">
-                      <table className="w-full text-xs md:text-sm">
-                        <tbody>
-                          {resolveItems(order).map((row, index) => (
-                            <React.Fragment key={index}>
-                              <tr>
-                                <td className="py-0.5 md:py-1">{row.name}</td>
-                                <td className="py-0.5 md:py-1 text-right">{row.quantity} x ₹{row.price.toFixed(2)}</td>
-                              </tr>
-                              <tr className="border-b border-dotted">
-                                <td></td>
-                                <td className="py-0.5 md:py-1 text-right font-bold">₹{row.total.toFixed(2)}</td>
-                              </tr>
-                            </React.Fragment>
-                          ))}
+                      <div className="space-y-1">
+                        {items.length > 0 ? (
+                          items.map((row, idx) => (
+                            <div key={idx} className="flex justify-between">
+                              <span className="truncate">{row.name}</span>
+                              <span className="font-medium">× {row.quantity}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-1 text-gray-500">Order items not available</div>
+                        )}
+                      </div>
 
-                          {resolveItems(order).length === 0 && (
-                            <tr>
-                              <td colSpan={2} className="text-center py-1 text-gray-500">Order items not available</td>
-                            </tr>
-                          )}
-                          
-                          {/* Subtotal */}
-                          <tr>
-                            <td className="py-0.5 md:py-1">Subtotal:</td>
-                            <td className="py-0.5 md:py-1 text-right">₹{order.subtotal?.toFixed(2) || '0.00'}</td>
-                          </tr>
-                          
-                          {/* Shipping */}
-                          <tr>
-                            <td className="py-0.5 md:py-1">Shipping:</td>
-                            <td className="py-0.5 md:py-1 text-right">₹{shippingFee.toFixed(2)}</td>
-                          </tr>
-                          
-                          {/* Tax */}
-                          {order.tax > 0 && (
-                            <tr>
-                              <td className="py-0.5 md:py-1">Tax:</td>
-                              <td className="py-0.5 md:py-1 text-right">₹{order.tax?.toFixed(2) || '0.00'}</td>
-                            </tr>
-                          )}
-                          
-                          {/* Discount */}
-                          {order.discount > 0 && (
-                            <tr>
-                              <td className="py-0.5 md:py-1">Discount:</td>
-                              <td className="py-0.5 md:py-1 text-right">-₹{order.discount?.toFixed(2) || '0.00'}</td>
-                            </tr>
-                          )}
-                          
-                          {/* Total */}
-                          <tr className="font-bold">
-                            <td className="py-0.5 md:py-1 text-sm">Total:</td>
-                            <td className="py-0.5 md:py-1 text-right text-sm">₹{order.total?.toFixed(2) || '0.00'}</td>
-                          </tr>
-                        </tbody>
-                      </table>
+                      <div className="mt-2 border-t pt-1">
+                        <div className="flex justify-between"><span>Subtotal:</span><span>₹{(Number(effectiveSubtotal) || 0).toFixed(2)}</span></div>
+                        <div className="flex justify-between"><span>Shipping:</span><span>₹{shippingFee.toFixed(2)}</span></div>
+                        <div className="flex justify-between font-bold"><span>Total:</span><span>₹{(Number(order.total) || Number(effectiveSubtotal) + shippingFee).toFixed(2)}</span></div>
+                      </div>
                     </div>
                   )}
 
