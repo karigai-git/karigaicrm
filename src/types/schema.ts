@@ -66,12 +66,12 @@ export interface Coupon extends BaseRecord {
 export interface Order extends BaseRecord {
   id: string;
   user: string[]; // This seems to be the user ID
-  status: 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  status: 'pending' | 'processing' | 'dispatched' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
   products: string; // This seems to be a summary string
   totalAmount: number;
   subtotal: number;
   total: number;
-  payment_status: 'pending' | 'paid' | 'failed';
+  payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
   customer_name: string;
   customer_email: string;
   customer_phone: string;
@@ -182,12 +182,12 @@ export type CreateProductData = {
 
 export type CreateOrderData = {
   user: string[];
-  status: 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  status: 'pending' | 'processing' | 'dispatched' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
   products: string;
   totalAmount: number;
   subtotal: number;
   total: number;
-  payment_status: 'pending' | 'paid' | 'failed';
+  payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
   customer_name: string;
   customer_email: string;
   customer_phone: string;
@@ -214,8 +214,8 @@ export type CreateRazorpayOrderData = {
 export type UpdateProductData = Partial<Omit<Product, keyof BaseRecord>>;
 
 export type UpdateOrderData = Partial<CreateOrderData> & {
-  status?: 'pending' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
-  payment_status?: 'pending' | 'paid' | 'failed';
+  status?: 'pending' | 'processing' | 'dispatched' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  payment_status?: 'pending' | 'paid' | 'failed' | 'refunded';
   tracking_link?: string;
   shipping_carrier?: string;
   refund_amount?: number;

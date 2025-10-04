@@ -18,7 +18,7 @@ const OrdersPage: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [query, setQuery] = useState("");
 
-  const { orders, isLoading, error, createOrder, updateOrder, refetch } = useOrders();
+  const { orders, isLoading, error, createOrder, updateOrder, refetch, updatePaymentStatus } = useOrders();
 
   const handleViewOrder = (order: Order) => {
     setSelectedOrder(order);
@@ -110,6 +110,9 @@ const OrdersPage: React.FC = () => {
               onViewOrder={handleViewOrder}
               onUpdateStatus={(orderId, status) => {
                 updateOrder.mutate({ id: orderId, data: { status } });
+              }}
+              onUpdatePaymentStatus={(orderId, status) => {
+                updatePaymentStatus(orderId, status);
               }}
             />
             {/* Empty state */}

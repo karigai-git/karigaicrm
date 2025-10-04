@@ -15,7 +15,7 @@ export interface CreateOrderData {
 // Extend the UpdateOrderData interface to include all properties used in this file
 interface UpdateOrderData extends SchemaUpdateOrderData {
   refund_amount?: number;
-  payment_status?: 'pending' | 'paid' | 'failed';
+  payment_status?: 'pending' | 'paid' | 'failed' | 'refunded';
 }
 
 export function useOrders() {
@@ -241,5 +241,16 @@ export function useOrders() {
     createOrder,
     updateOrder,
     deleteOrder,
+    refetch: async () => {
+      return queryClient.invalidateQueries({ queryKey: ['orders'] });
+    },
+    updatePaymentStatus: async (orderId: string, status: string) => {
+      return updateOrder.mutate({
+        id: orderId,
+        data: {
+          payment_status: status as 'pending' | 'paid' | 'failed' | 'refunded',
+        }
+      });
+    }
   };
 }

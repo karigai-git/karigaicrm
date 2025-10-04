@@ -74,6 +74,7 @@ interface OrdersTableProps {
   isLoading?: boolean;
   onViewOrder: (order: Order) => void;
   onUpdateStatus: (orderId: string, status: OrderStatus) => void;
+  onUpdatePaymentStatus?: (orderId: string, status: PaymentStatus) => void;
   onRefresh?: () => void;
 }
 
@@ -130,6 +131,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
   isLoading,
   onViewOrder,
   onUpdateStatus,
+  onUpdatePaymentStatus,
   onRefresh,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -152,6 +154,13 @@ export const OrdersTable: FC<OrdersTableProps> = ({
     { value: "shipped", label: "Shipped" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled", label: "Cancelled" },
+  ];
+  
+  const paymentStatusOptions: { value: PaymentStatus; label: string }[] = [
+    { value: "pending", label: "Pending" },
+    { value: "paid", label: "Paid" },
+    { value: "failed", label: "Failed" },
+    { value: "refunded", label: "Refunded" },
   ];
 
   async function triggerStatusWebhook(
@@ -324,6 +333,19 @@ export const OrdersTable: FC<OrdersTableProps> = ({
       triggerStatusWebhook(order, newStatus);
       // Optional refresh hook
       onRefresh?.();
+    }
+  }
+
+  async function handlePaymentStatusChange(order: Order, value: string) {
+    const newStatus = value as PaymentStatus;
+    try {
+      // Update local/backend via provided callback
+      if (onUpdatePaymentStatus) {
+        onUpdatePaymentStatus(order.id, newStatus);
+        onRefresh?.();
+      }
+    } catch (err) {
+      console.error("Failed to update payment status", err);
     }
   }
 
@@ -657,8 +679,24 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                           ))}
                         </SelectContent>
                       </Select>
-                      {getPaymentStatusBadge(
-                        order.payment_status as PaymentStatus
+                      {onUpdatePaymentStatus ? (
+                        <Select
+                          defaultValue={order.payment_status as PaymentStatus}
+                          onValueChange={(val) => handlePaymentStatusChange(order, val)}
+                        >
+                          <SelectTrigger className="w-[180px] h-8">
+                            <SelectValue placeholder="Select payment status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentStatusOptions.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        getPaymentStatusBadge(order.payment_status as PaymentStatus)
                       )}
                     </div>
 
@@ -786,8 +824,24 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                     </Select>
                   </TableCell>
                   <TableCell>
-                    {getPaymentStatusBadge(
-                      order.payment_status as PaymentStatus
+                    {onUpdatePaymentStatus ? (
+                      <Select
+                        defaultValue={order.payment_status as PaymentStatus}
+                        onValueChange={(val) => handlePaymentStatusChange(order, val)}
+                      >
+                        <SelectTrigger className="w-[180px] h-8">
+                          <SelectValue placeholder="Select payment status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {paymentStatusOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      getPaymentStatusBadge(order.payment_status as PaymentStatus)
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
