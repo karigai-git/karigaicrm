@@ -63,7 +63,7 @@ export function CreateOrderDialog({
 }: CreateOrderDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedItems, setSelectedItems] = useState<Array<{ product: Product; quantity: number }>>([]);
+  const [selectedItems, setSelectedItems] = useState<Array<{ product: Product; quantity: number; selectedSize?: string; selectedColor?: string }>>([]);
   const [shippingAmount, setShippingAmount] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
   // Bulk create state
@@ -110,10 +110,14 @@ export function CreateOrderDialog({
   const buildProductsJson = () => {
     const rows = selectedItems.map((it) => ({
       product_id: it.product.id,
-      name: it.product.name,
+      name: it.product.name + (it.selectedSize ? ` - ${it.selectedSize}` : '') + (it.selectedColor ? ` - ${it.selectedColor}` : ''),
       price: Number(it.product.price) || 0,
       quantity: it.quantity,
       total: ((Number(it.product.price) || 0) * it.quantity),
+      variant: {
+        size: it.selectedSize || null,
+        color: it.selectedColor || null
+      }
     }));
     return JSON.stringify(rows);
   };
@@ -126,13 +130,43 @@ export function CreateOrderDialog({
   };
 
   const matchProduct = (name: string) => {
-    const q = name.trim().toLowerCase();
-    // exact match first
+    // Extract variant information if format is like "Product Name - Size - Color"
+    let q = name.trim().toLowerCase();
+    let size = '';
+    let color = '';
+    
+    // Look for size/color specifications in the format "Product - Size - Color"
+    const parts = q.split(/-\s*/);
+    if (parts.length > 1) {
+      // The first part is the product name
+      q = parts[0].trim();
+      
+      // Check remaining parts for size/color indicators
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (part.startsWith('size:') || part.includes('ml') || part.includes('l') || 
+            part.includes('g') || part.includes('kg')) {
+          size = part.replace(/^size:\s*/i, '');
+        } else if (part.startsWith('color:') || 
+                  ['red', 'blue', 'green', 'yellow', 'black', 'white', 'purple', 'pink', 'orange', 'brown'].includes(part)) {
+          color = part.replace(/^color:\s*/i, '');
+        }
+      }
+    }
+    
+    // Try to find an exact match first
     let found = products.find((p: Product) => (p.name || '').toLowerCase() === q);
-    if (found) return found;
-    // contains match
-    found = products.find((p: Product) => (p.name || '').toLowerCase().includes(q) || q.includes((p.name || '').toLowerCase()));
-    return found || null;
+    
+    if (found) {
+      return { product: found, size, color };
+    }
+    
+    // Try partial matches
+    found = products.find((p: Product) => 
+      (p.name || '').toLowerCase().includes(q) || q.includes((p.name || '').toLowerCase())
+    );
+    
+    return found ? { product: found, size, color } : null;
   };
 
   const convertPasteToCsv = () => {
@@ -205,13 +239,34 @@ export function CreateOrderDialog({
           }
 
           // build products JSON
-          const productRows: Array<{product_id: string; quantity: number; price: number; name: string}> = [];
+          const productRows: Array<{
+            product_id: string; 
+            quantity: number; 
+            price: number; 
+            name: string;
+            variant?: {
+              size: string | null;
+              color: string | null;
+            };
+          }> = [];
           let subtotal = 0;
           items.forEach(it => {
-            const match = matchProduct(it.name);
-            if (match) {
-              const price = Number(match.price || 0);
-              productRows.push({ product_id: match.id, quantity: it.qty, price, name: match.name });
+            const matchResult = matchProduct(it.name);
+            if (matchResult) {
+              const { product, size, color } = matchResult;
+              const price = Number(product.price || 0);
+              const productName = product.name + (size ? ` - ${size}` : '') + (color ? ` - ${color}` : '');
+              
+              productRows.push({ 
+                product_id: product.id, 
+                quantity: it.qty, 
+                price, 
+                name: productName,
+                variant: {
+                  size: size || null,
+                  color: color || null
+                }
+              });
               subtotal += price * it.qty;
             } else {
               errs.push(`Block ${idx + 1}: product not found -> "${it.name}"`);
@@ -556,11 +611,28 @@ export function CreateOrderDialog({
                 <Select onValueChange={(id) => {
                   const prod = products.find((p: Product) => p.id === id);
                   if (prod) {
-                    setSelectedItems((prev) => {
-                      const exists = prev.find((x) => x.product.id === prod.id);
-                      if (exists) return prev; // avoid duplicates
-                      return [...prev, { product: prod, quantity: 1 }];
-                    });
+                    // Create a new item without adding it to the list yet
+                    const newItem = { product: prod, quantity: 1 };
+                    
+                    // Check for variants
+                    const hasSizes = prod.available_sizes && prod.available_sizes !== '';
+                    const hasColors = prod.available_colors && prod.available_colors !== '';
+                    
+                    if (!hasSizes && !hasColors) {
+                      // No variants, add directly
+                      setSelectedItems((prev) => {
+                        const exists = prev.find((x) => x.product.id === prod.id);
+                        if (exists) return prev; // avoid duplicates
+                        return [...prev, newItem];
+                      });
+                    } else {
+                      // Show variant selector dialog or expand the current item
+                      setSelectedItems((prev) => {
+                        const exists = prev.find((x) => x.product.id === prod.id && !x.selectedSize && !x.selectedColor);
+                        if (exists) return prev; // avoid duplicates of base product
+                        return [...prev, newItem];
+                      });
+                    }
                   }
                 }}>
                   <SelectTrigger className="w-[260px]" disabled={isLoading}>
@@ -579,30 +651,126 @@ export function CreateOrderDialog({
               {/* Selected items list */}
               {selectedItems.length > 0 && (
                 <div className="border rounded-md divide-y">
-                  {selectedItems.map((it, idx) => (
-                    <div key={it.product.id} className="flex items-center gap-3 p-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{it.product.name}</div>
-                        <div className="text-xs text-muted-foreground">₹{Number(it.product.price || 0).toFixed(2)}</div>
+                  {selectedItems.map((it, idx) => {
+                    // Parse variants if available
+                    const parseSizes = (sizesStr: string | undefined) => {
+                      if (!sizesStr) return [];
+                      try {
+                        const parsed = JSON.parse(sizesStr);
+                        return Array.isArray(parsed) ? parsed : [];
+                      } catch {
+                        return sizesStr.split(',').map(s => s.trim()).filter(Boolean);
+                      }
+                    };
+                    
+                    const parseColors = (colorsStr: string | undefined) => {
+                      if (!colorsStr) return [];
+                      try {
+                        const parsed = JSON.parse(colorsStr);
+                        return Array.isArray(parsed) ? parsed : [];
+                      } catch {
+                        return colorsStr.split(',').map(c => c.trim()).filter(Boolean);
+                      }
+                    };
+                    
+                    const sizes = parseSizes(it.product.available_sizes);
+                    const colors = parseColors(it.product.available_colors);
+                    
+                    return (
+                      <div key={`${it.product.id}-${idx}`} className="flex flex-col p-2 border-b">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{it.product.name}</div>
+                            <div className="text-xs text-muted-foreground">₹{Number(it.product.price || 0).toFixed(2)}</div>
+                            {(it.selectedSize || it.selectedColor) && (
+                              <div className="text-xs font-medium mt-1">
+                                {it.selectedSize && <span className="mr-2">Size: {it.selectedSize}</span>}
+                                {it.selectedColor && <span>Color: {it.selectedColor}</span>}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={1}
+                              value={it.quantity}
+                              onChange={(e) => {
+                                const q = Math.max(1, Number(e.target.value) || 1);
+                                setSelectedItems((prev) => prev.map((row, i) => i === idx ? { ...row, quantity: q } : row));
+                              }}
+                              className="w-20"
+                            />
+                            <Button 
+                              type="button" 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => setSelectedItems((prev) => 
+                                prev.filter((_, i) => i !== idx)
+                              )}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="w-24 text-right font-medium">₹{(((Number(it.product.price) || 0) * it.quantity)).toFixed(2)}</div>
+                        </div>
+                        
+                        {/* Variant selectors */}
+                        {(sizes.length > 0 || colors.length > 0) && (
+                          <div className="flex flex-wrap gap-2 mt-2 ml-1">
+                            {sizes.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium">Size:</span>
+                                <Select
+                                  value={it.selectedSize || ""}
+                                  onValueChange={(size) => {
+                                    setSelectedItems((prev) => prev.map((row, i) => 
+                                      i === idx ? { ...row, selectedSize: size } : row
+                                    ));
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 w-[100px]">
+                                    <SelectValue placeholder="Select size" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {sizes.map((size: string) => (
+                                      <SelectItem key={size} value={size}>
+                                        {size}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                            
+                            {colors.length > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-medium">Color:</span>
+                                <Select
+                                  value={it.selectedColor || ""}
+                                  onValueChange={(color) => {
+                                    setSelectedItems((prev) => prev.map((row, i) => 
+                                      i === idx ? { ...row, selectedColor: color } : row
+                                    ));
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 w-[120px]">
+                                    <SelectValue placeholder="Select color" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {colors.map((color: string) => (
+                                      <SelectItem key={color} value={color}>
+                                        {color}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={it.quantity}
-                          onChange={(e) => {
-                            const q = Math.max(1, Number(e.target.value) || 1);
-                            setSelectedItems((prev) => prev.map((row, i) => i === idx ? { ...row, quantity: q } : row));
-                          }}
-                          className="w-20"
-                        />
-                        <Button type="button" variant="ghost" size="icon" onClick={() => setSelectedItems((prev) => prev.filter((row) => row.product.id !== it.product.id))}>
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="w-24 text-right font-medium">₹{(((Number(it.product.price) || 0) * it.quantity)).toFixed(2)}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -731,8 +899,19 @@ export function CreateOrderDialog({
 
               <div className="text-xs text-muted-foreground">
                 Expected headers: <code>customer_name, customer_email, customer_phone, status, payment_status, subtotal, total, shipping_cost, products, notes, created</code>
-                {' '}• products must be a JSON array string like <code>{'[{"product_id":"abc","quantity":1,"price":99}]'}</code>
+                {' '} • products must be a JSON array string like <code>{'[{"product_id":"abc","quantity":1,"price":99}]'}</code>
               </div>
+              
+              <div className="mt-2 bg-muted/50 p-2 rounded-md text-xs">
+                <div className="font-semibold mb-1">Product Variant Help:</div>
+                <p>To specify variants when pasting order text, use the format:</p>
+                <ul className="ml-4 mt-1 list-disc space-y-1">
+                  <li>"1 Herbal Oil - 100ml" (for size variants)</li>
+                  <li>"2 Herbal Oil - Green" (for color variants)</li>
+                  <li>"1 Herbal Oil - 200ml - Blue" (for both size and color)</li>
+                </ul>
+              </div>
+              
               <div className="flex items-center gap-2">
                 <Button type="button" variant="secondary" onClick={handleBulkCreate} disabled={isBulkCreating || !bulkInput.trim()}>
                   {isBulkCreating ? 'Creating…' : 'Create Bulk Orders'}

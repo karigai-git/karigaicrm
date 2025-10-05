@@ -142,8 +142,9 @@ export const OrdersTable: FC<OrdersTableProps> = ({
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Webhook target for status changes
+  // Webhook target for status changes (env override supported)
   const WEBHOOK_URL =
+    (typeof import.meta !== "undefined" && (import.meta as any)?.env?.VITE_N8N_ORDER_WEBHOOK_URL) ||
     "https://backend-n8n.7za6uc.easypanel.host/webhook/karigaiorders";
 
   const statusOptions: { value: OrderStatus; label: string }[] = [
@@ -311,6 +312,31 @@ export const OrdersTable: FC<OrdersTableProps> = ({
               tracking_code: r.tracking_code,
               tracking_url: r.tracking_url,
             });
+          } else {
+            // Order not in current list; still notify webhook with minimal payload
+            try {
+              await fetch(WEBHOOK_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  event: "order_status_changed",
+                  source: "karigai-crm",
+                  order_id: r.id,
+                  previous_status: undefined,
+                  status: "shipped",
+                  customer_name: "",
+                  customer_email: "",
+                  customer_phone: "",
+                  total: undefined,
+                  tracking_code: r.tracking_code,
+                  tracking_url: r.tracking_url,
+                  created: undefined,
+                  timestamp: new Date().toISOString(),
+                }),
+              });
+            } catch (err) {
+              console.error("Failed to POST status change to webhook (from CSV minimal)", r.id, err);
+            }
           }
         } catch (err) {
           console.error("Failed to update order from CSV", r.id, err);
