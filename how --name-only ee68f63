@@ -1,0 +1,3 @@
+[33mee68f63[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Fix service reachability by combining API and frontend on same port (8080)
+[33m65bcdfe[m Fix Docker server issues by using TSX to run TypeScript files directly
+[33mc93fa2b[m Fix Docker server issues by using esbuild to handle environment variables
